@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lipidomic Kinetics – Regression Analysis</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    pre {
+      background: #eef3f7;
+      padding: 10px 14px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    em {
+      color: #444;
+    }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Lipidomic Kinetics – Comparative Regression Analysis</h1>
+
+<div class="box">
+  <p>The <strong>Comparative Regression Analysis</strong> module (<code>lipid_regression_comparative.py</code>) performs <em>per-metric statistical modeling</em> across user-defined categorical factors such as genotype, treatment, or sex.  
+  It builds individual regression models for every quantitative metric (e.g., <em>Abundance</em>, <em>Rate</em>, or <em>Asymptote A</em>), contrasts each category against a reference level, and exports coefficients, confidence intervals, ANOVA tables, and diagnostic plots.</p>
+
+  <h2>Purpose</h2>
+  <p>After generating a tidy regression matrix, this program tests whether each biological factor significantly affects measured lipid metrics. It uses <strong>ordinary least squares (OLS)</strong> modeling with optional <strong>heteroscedasticity-robust (HC3)</strong> standard errors for reliable inference.</p>
+
+  <h2>Workflow Overview</h2>
+  <ol>
+    <li><strong>Load CSV</strong> – Import the tidy dataset containing columns such as <code>metric</code>, <code>value</code>, and your categorical predictors (e.g., <code>genotype</code>).</li>
+    <li><strong>Select Class and Reference</strong> – Choose the grouping variable (e.g., <code>genotype</code>) and a reference level (e.g., <code>APOE3</code>).</li>
+    <li><strong>Build Model Formula</strong> – For each metric, automatically construct a formula of the form:<br>
+      <pre><code>value ~ C(class, Treatment(reference="ref")) + other predictors</code></pre></li>
+    <li><strong>Fit OLS Models</strong> – Estimate per-metric coefficients and optional robust SEs (<code>HC3</code>).</li>
+    <li><strong>Generate ANOVA and Diagnostics</strong> – Compute Type II ANOVA tables and create forest-style plots of coefficients with 95% CIs and keys for term interpretation.</li>
+    <li><strong>Export Results</strong> – Save summary tables, diagnostic PNGs, and a combined comparisons CSV to the chosen output directory.</li>
+  </ol>
+
+  <h2>Model Structure</h2>
+  <p>Each metric is analyzed independently using a flexible OLS formula generated via <code>statsmodels</code>.  
+  Categorical predictors are wrapped in <code>C()</code> to ensure proper dummy encoding, with explicit reference-level control through <code>Treatment(reference="...")</code>.  
+  Numeric predictors are added automatically if they exhibit variation within the subset.</p>
+
+  <pre><code># Example
+value ~ C(genotype, Treatment(reference="APOE3")) + sex + age
+</code></pre>
+
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>Per-metric regression summaries</strong> – OLS and robust (HC3) tables saved as <code>_summary.txt</code>.</li>
+    <li><strong>ANOVA results</strong> – Type II ANOVA tables (<code>_anova.csv</code>).</li>
+    <li><strong>Coefficient forest plots</strong> – Visual diagnostics with numeric term keys.</li>
+    <li><strong>Combined comparisons file</strong> – Aggregated contrast table (<code>comparisons_{class}_{ref}.csv</code>).</li>
+    <li><strong>Error log</strong> – Any fit issues recorded in <code>_errors.txt</code>.</li>
+  </ul>
+
+  <h2>Statistical Features</h2>
+  <ul>
+    <li>Automatic reference-level detection and formula construction.</li>
+    <li>Optional pairwise categorical interactions or interactions with target class.</li>
+    <li>Automatic drop of degenerate predictors (no within-metric variance).</li>
+    <li>Robust SE support (<code>HC3</code>) for heteroscedastic data.</li>
+    <li>Configurable minimum row threshold and category filters.</li>
+  </ul>
+
+  <h2>Run the Helper Script</h2>
+  <p>Once <code>lipid_regression_comparative.cmd</code> is in the working directory, launch it to begin interactive model selection and analysis for each metric:</p>
+</div>
+
+<a href="run:Regression_analysis\Regression_analysis.cmd" data-label="Run Regression Analysis">
+  <div class="hidden-run">Run Comparative Regression Analysis</div>
+</a>
+
+<p class="hint">If Regression_analysis\Regression_analysis.cmd (or ish) exists in the working directory, the “Run Regression Analysis ” button will appear below and execute it.<
+
+<p class="hint">After execution, check the output folder for summary tables (<code>*.txt</code>), ANOVA (<code>*.csv</code>), and diagnostic plots (<code>_coeff_forest.png</code>). These results can be directly used to interpret group effects in the tidy regression matrix.</p>
+
+
+
+
+
+</body>
+</html>

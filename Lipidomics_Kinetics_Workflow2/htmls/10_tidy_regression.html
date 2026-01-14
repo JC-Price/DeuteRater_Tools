@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Building the Tidy Regression Matrix</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+      max-width: 960px;
+      margin: auto;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    h3 {
+      color: #333;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-size: 1.1rem;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    pre {
+      background: #eef3f7;
+      padding: 10px 14px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    em { color: #444; }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Building the Tidy Regression Matrix</h1>
+
+<div class="box">
+  <h2>Purpose of this step</h2>
+  <p>
+    The <strong>tidy regression matrix</strong> serves as the bridge between the wide-format lipidomics export
+    and the modeling frameworks used for <em>n<sub>L</sub></em> component deconvolution and genotype-wise
+    regression analysis. It transforms the combined lipid kinetic dataset into a long-format structure that
+    downstream regression libraries can interpret directly.
+  </p>
+
+  <ul>
+    <li><strong>n<sub>L</sub> component deconvolution</strong> — solving for each fatty acid and head-group’s
+        contribution to measured isotopic labeling.</li>
+    <li><strong>Regression analysis</strong> — fitting models that explain variation in <em>A<sub>syn</sub></em>,
+        <em>k</em>, and <em>n<sub>L</sub></em> across genotypes, diets, ages, regions or others.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Workflow overview</h2>
+  <ol>
+    <li><strong>Detect columns</strong> that follow the standardized naming convention
+        (<code>metric + sample_id</code>).</li>
+    <li><strong>Split</strong> <code>sample_id</code> into design-matrix columns (genotype, age, diet, brain region, etc.).</li>
+    <li><strong>Unpivot</strong> metrics (<code>Abundance</code>, <code>Rate</code>, asymptote <em>A<sub>syn</sub></em>, etc.) into tidy rows.</li>
+    <li><strong>Expand</strong> confidence intervals into explicit <code>ci_lower</code> and <code>ci_upper</code> columns.</li>
+    <li><strong>Output</strong> a CSV ready for <code>Genotype_agnostic_regression_matrix_with_intervals.py</code>.</li>
+  </ol>
+</div>
+
+<div class="box">
+  <h2>Defining the mapping dictionary (JSON)</h2>
+  <p>
+    The helper script requires a <strong>mapping dictionary</strong> to translate tokens in each
+    <code>sample_id</code> into structured regression columns. You can provide this dictionary either:
+  </p>
+  <ul>
+    <li>as a JSON file via <code>--map path/to/mapping.json</code>, or</li>
+    <li>inline through the GUI prompt.</li>
+  </ul>
+
+  <p>
+    Each top-level key in the JSON becomes a column in the tidy matrix. Values can be:
+  </p>
+  <ul>
+    <li><strong><code>{"map": ...}</code></strong> — for renamed tokens with optional <code>type</code> and
+        <code>order</code> metadata to support categorical encoding.</li>
+    <li><strong>Plain dict</strong> — a shorter syntax when metadata is unnecessary.</li>
+  </ul>
+
+  <h3>Single-factor example</h3>
+  <pre><code>{
+  "genotype": {
+    "map": {"A2": "APOE2", "A3": "APOE3", "A4": "APOE4"},
+    "type": "category",
+    "order": ["APOE3", "APOE2", "APOE4"]
+  }
+}</code></pre>
+
+  <h3>Multi-factor example</h3>
+  <pre><code>{
+  "genotype": {"E2": "APOE2", "E3": "APOE3", "E4": "APOE4"},
+  "housing":  {"2v3": "2v3",  "4v3": "4v3"},
+  "sex":      {"YM": "Male",  "YF": "Female"}
+}</code></pre>
+
+  <p>
+    During execution, the script scans each <code>sample_id</code>, applies the mapping rules, and appends
+    the decoded factors as new columns — ready for regression or for the <em>n<sub>L</sub></em> solver’s design matrix.
+  </p>
+</div>
+
+
+<a href="run:Creating_tidy_regression_matrix_with_CIs\Creating_tidy_regression_matrix_with_CIs.cmd" data-label="Build Tidy Regression Matrix">
+  <div class="hidden-run">Build Tidy Regression Matrix</div>
+</a>
+
+<p class="hint">If Creating_tidy_regression_matrix_with_CIs\Creating_tidy_regression_matrix_with_CIs.cmd (or ish) exists in the working directory, the “Build Tidy Regression Matrix” button will appear below and execute it.</p>
+
+
+</body>
+</html>

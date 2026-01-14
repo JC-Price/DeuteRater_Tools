@@ -1,0 +1,320 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Post-hoc Analysis & Statistics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.65;
+      max-width: 960px;
+      margin: auto;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #126782;
+      font-size: 1.35rem;
+      margin-top: 26px;
+      margin-bottom: 10px;
+    }
+    h3 {
+      color: #333;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-size: 1.1rem;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code { background: #eef3f7; padding: 2px 5px; border-radius: 4px; font-size: 0.95rem; }
+    pre { background: #eef3f7; padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+    ul { margin: 6px 0 12px 24px; }
+    .hint { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+    footer { margin-top: 28px; color: #555; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+<h1>Post-hoc Analysis & Statistics</h1>
+
+
+  <h2>Purpose of this module</h2>
+
+
+<div class="box">
+  <p>
+    This module bridges <strong>kinetic quantification</strong> and <strong>biological interpretation</strong>.
+    It performs robust statistical comparisons of <em>Abundance</em>, <em>Turnover Rate (k)</em>,
+    <em>Asymptote (A<sub>syn</sub>)</em>, and <em>n<sub>L</sub></em> (incorporable deuterium count)
+    between experimental and control groups, generating interpretable visual summaries of lipid metabolic regulation.
+  </p>
+</div>
+
+<h2>How to Use It</h2>
+<div class="box">
+  <ol>
+    <li><strong>Run the script using the "Analyze Wide Dataframe" button below.</li>
+    <li><strong>Select your input files</strong> — one or more DeuteRater-processed CSVs.</li>
+    <li><strong>Enter experiment–control pairs</strong> when prompted (e.g. <code>(A2,A3),(A4,E3)</code>).</li>
+    <li>When the GUI opens, use its tabs (<em>Homeostasis, Volcano, Conformity, Settings</em>) to:
+      <ul>
+        <li>Choose which plots to generate,</li>
+        <li>Define which groups to analyze (All, Ontologies, lipid classes),</li>
+        <li>Optionally adjust filters or load a YAML configuration (<code>post_hoc_default.yaml</code>).</li>
+      </ul>
+    </li>
+    <li>Click <strong>Analyze</strong>. The program processes your datasets and saves all results in a versioned folder:
+      <br><code>Analysis/&lt;timestamp&gt;/plot_outputs/</code>.
+    </li>
+  </ol>
+  <p class="hint">Each YAML mirrors the GUI structure so you can re-run analyses identically on future datasets.</p>
+</div>
+
+<h2>What You’ll Get</h2>
+<div class="box">
+  <ul>
+    <li><strong>Volcano plots</strong> (<code>log₂FC</code> vs <code>−log₁₀p</code>) for Abundance, Rate, Asymptote, and nₗ.</li>
+    <li><strong>Conformity plots</strong> showing paired control vs experiment scatter points and t-test statistics.</li>
+    <li><strong>Homeostasis plots</strong> linking abundance and rate changes to visualize lipid metabolic balance (y = −x line).</li>
+    <li><strong>Summary tables:</strong>
+      <ul>
+        <li><code>final_dataframe.csv</code> — all derived metrics and fold-changes.</li>
+        <li><code>paired_ttest_statistics.csv</code> — t-test results and significance flags.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>
+  All plots are color-coded by lipid ontology (e.g., PA/PC/PE = red, ethers = blue, TG/CL = magenta),
+  and stored in per-group subfolders such as <code>plot_outputs/glycerolipids/</code>.
+  </p>
+</div>
+
+<h2>How It Works</h2>
+<div class="box">
+  <h3>1. Data preparation</h3>
+  <ul>
+    <li>Each selected CSV is wrapped in an <code>Experiment</code> object that standardizes columns, extracts identifiers, and classifies lipids.</li>
+    <li><b>Adducts remain distinct.</b> Every Alignment ID (e.g., [M+H]+, [M+Na]+, [M–H]–) is treated as a separate observation rather than being collapsed by lipid name or polarity.</li>
+    <li><b>Bias correction:</b> Experimental median abundances are aligned to their control scale using <strong>robust linear regression</strong> (Huber → Theil–Sen → OLS fallback).  
+        The resulting slope and intercept are applied to all experimental replicates to yield <em>control-aligned medians</em>.</li>
+    <li>The terms <code>Experiment_DR_median_abundance_corrected</code> and <code>Control_DR_median_abundance_reference</code> denote these aligned medians on a shared intensity scale.</li>
+  </ul>
+
+  <h3>2. Fold-change and significance testing</h3>
+  <ul>
+    <li><b>Abundance:</b> Each adduct is tested independently.  Welch’s t-test is used when n ≥ 2 per group; otherwise Mann–Whitney U.  
+        1000 bootstrap resamples estimate 95 % confidence intervals for log₂ fold-change.</li>
+    <li><b>Rate:</b> Welch’s t using reported mean ± SE and replicate count per group.</li>
+    <li><b>Asymptote:</b> Fits y = A · e⁻ᵏᵗ to each time-course; bootstraps Aₑ/A꜀ ratios to obtain empirical p-values.</li>
+    <li><b>Flux & synthesis metrics:</b> Combine abundance and rate p-values via <em>Fisher’s method</em>, with Benjamini–Hochberg FDR correction applied downstream.</li>
+  </ul>
+
+  <h3>3. Filtering and grouping</h3>
+
+<p>
+Each experiment–control pair is filtered through the same logic used internally by the
+<code>filter_dataframe()</code> function.  
+This flexible system allows you to define rules for which lipids are shown or masked
+in Volcano, Conformity, and Homeostasis plots.
+You can specify filters directly in the GUI or in the YAML file
+(<code>post_hoc_default.yaml</code>), and they will be applied independently to each dataset
+after all derived statistics are computed.
+</p>
+
+<h4>How filtering works</h4>
+
+<p>
+Each filter is a key–value pair where the key is a column name (or pattern)
+and the value describes a condition.  
+The program reads these rules and evaluates them using the same logic as:
+</p>
+
+<pre>filter_dataframe(df, **filters)</pre>
+
+<p>
+By default, only rows that satisfy <em>all</em> conditions are kept.
+If <code>columns_to_nan</code> is provided, failing rows are not dropped
+but have those columns replaced with <code>NaN</code> — useful when
+you want to preserve lipid order for multi-metric plots.
+</p>
+
+<h4>Supported condition types</h4>
+
+<ul>
+  <li><b>1. Numeric comparisons (string form)</b><br>
+      Use mathematical operators in a string, e.g.:  
+      <code>{"-log10abn_P": "&gt; 1.3"}</code> keeps rows with p-values above significance.<br>
+      Accepted forms: <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>=</code>.
+  </li>
+
+  <li><b>2. Numeric range (dictionary form)</b><br>
+      Provide <code>min</code> / <code>max</code> boundaries:  
+      <code>{"Abundance rate_*": {"min": 0.001, "max": 5}}</code>  
+      Optional keys <code>min_op</code> and <code>max_op</code> let you choose strict vs inclusive comparisons
+      (e.g., <code>{'min': 0, 'max': 1, 'max_op': '&lt;'}</code>).
+  </li>
+
+  <li><b>3. Text inclusion or exclusion</b><br>
+      Prefix your condition with <code>in:</code> or <code>not in:</code>.  
+      <code>{"MS Dial Flag": "not in:low score,no MS2"}</code> removes flagged entries.<br>
+      <code>{"Ontology": "in:TG,CL,PE"}</code> keeps only specified lipid classes.
+  </li>
+
+  <li><b>4. Boolean or exact matches</b><br>
+      <code>{"Standards": true}</code> keeps only rows where <code>Standards == True</code>.<br>
+      <code>{"Polarity": "Positive"}</code> filters to one ionization mode.
+  </li>
+
+  <li><b>5. Mixed types / fallback</b><br>
+      Any other type is compared directly using equality.
+  </li>
+</ul>
+
+<h4>Understanding the <code>*</code> wildcard</h4>
+
+<p>
+The asterisk (<code>*</code>) acts as a wildcard for column names, letting you apply one rule across
+all experiment or control identifiers.  
+For example:
+</p>
+
+<pre>{"Abundance rate_*": {"min": 0.001, "max": 5}}</pre>
+
+<p>
+matches columns like <code>Abundance rate_A2</code>, <code>Abundance rate_A3</code>, or
+<code>Abundance rate_E3</code>.  
+The wildcard expands automatically within each experiment’s dataset, so the same filter
+works across all experiment–control pairs without modification.
+</p>
+
+<h4>How filters interact with plot types</h4>
+
+<ul>
+  <li><b>Volcano plots:</b> filters are applied to the columns relevant to that metric
+      (e.g., abundance, rate, asymptote, or nₗ).  
+      Example YAML snippet:
+      <pre>{
+  "Volcano": {
+    "Abundance": {"-log10abn_P": "&gt; 0", "Abundance rate_*": {"min": 0.001}},
+    "Rate": {"-log10rate_P": "&gt; 0"}
+  }
+}</pre>
+      Only lipids passing these rules appear on the volcano.
+  </li>
+
+  <li><b>Conformity plots:</b> filters act on the abundance medians used in
+      control–experiment scatter plots
+      (<code>Control_DR_median_abundance_reference</code> vs
+      <code>Experiment_DR_median_abundance_corrected</code>).
+      For example:
+      <pre>{"Abundance num_measurements_*": {"min": 3}}</pre>
+      ensures that only lipids with at least three replicates per group are included.
+  </li>
+
+  </ul>
+
+<h4>Applying filters across multiple experiments</h4>
+
+<p>
+Each experiment–control pair (<code>(A2,A3)</code>, <code>(A4,E3)</code>, etc.)
+is processed as its own <code>Experiment</code> object.
+Filters are applied <b>after</b> all metrics (fold-changes, p-values, bootstraps)
+are calculated, ensuring the statistical tests themselves are unaffected.
+This means you can re-filter or re-plot results without rerunning the full computation.
+</p>
+
+<h4>Practical examples</h4>
+
+<ul>
+  <li><b>Remove unreliable peaks:</b><br>
+    <code>{"MS Dial Flag": "not in:low score,no MS2"}</code>
+  </li>
+  <li><b>Show only statistically significant abundance changes:</b><br>
+    <code>{"-log10abn_P": "&gt; 1.3", "log2_abn_FC": {"min": -2, "max": 2}}</code>
+  </li>
+  <li><b>Retain lipids with enough replicates:</b><br>
+    <code>{"Abundance num_measurements_*": {"min": 3}}</code>
+  </li>
+  <li><b>Restrict to key lipid classes:</b><br>
+    <code>{"Ontology": "in:TG,CL,PE"}</code>
+  </li>
+  <li><b>Temporarily mask without deleting rows:</b><br>
+    <code>columns_to_nan=["log2_abn_FC", "abn_p_value"]</code>  
+    (used internally when generating overlapping plots).
+  </li>
+</ul>
+
+<p>
+All filters can be saved and re-applied through YAML, allowing reproducible
+data-quality thresholds across experiments and researchers.
+</p>
+
+
+  <h3>4. Plot generation</h3>
+  <ul>
+    <li><strong>Volcano:</strong> log₂ FC vs −log₁₀ p, ontology-colored with significance thresholds.</li>
+    <li><strong>Conformity:</strong> control x vs experiment y scatter of bias-corrected medians, annotated with regression and t-statistics.</li>
+    <li><strong>Homeostasis:</strong> log₂ FC (abundance) vs log₂ FC (rate) showing the y = −x metabolic-balance line.</li>
+  </ul>
+</div>
+
+<h2>Why It’s Defendable</h2>
+<div class="box">
+  <h3>Preservation of ion-specific information</h3>
+  <p>
+  Adducts are never averaged together.  
+  Treating each Alignment ID as a unique measurement preserves polarity- and adduct-specific ionization behavior,
+  enabling valid per-species statistics and transparent reproducibility.
+  </p>
+
+  <h3>Robust bias correction</h3>
+  <p>
+  Huber regression aligns experiment and control intensities on a shared scale while resisting outliers and intensity skew.
+  Stored slope and intercept values document exactly how each dataset was corrected,
+  making every fold-change calculation traceable and reproducible.
+  </p>
+
+  <h3>Appropriate statistical models</h3>
+  <ul>
+    <li>Parametric Welch’s t-tests run only when replicate counts justify them.</li>
+    <li>Automatic fallback to non-parametric Mann–Whitney U safeguards against small-n or non-normal data.</li>
+    <li>Asymptote fits use bootstrap resampling rather than parametric assumptions.</li>
+  </ul>
+
+  <h3>Multiple-testing control and transparency</h3>
+  <p>
+  All abundance-related p-values undergo Benjamini–Hochberg FDR correction.
+  Diagnostic plots (residual histograms, QQ plots, residual vs fitted) accompany each run to verify normality.
+  Deviations are flagged visually, ensuring that interpretations remain defensible regardless of distribution shape.
+  </p>
+
+  <h3>Reproducibility</h3>
+  <p>
+  Every GUI configuration can be saved to YAML, recording filters, groups, and plot settings.
+  Combined with deterministic bootstrapping (fixed random seed), this ensures that identical inputs always yield identical results.
+  </p>
+</div>
+
+
+<!-- GUI anchor -->
+<!-- GUI anchor -->
+<a href="run:Lipidomics_post_hoc_analysis1.2/main.cmd" data-label="Analyze Wide Dataframe">
+  <div class="hidden-run">Launch Post-hoc Analysis</div>
+</a>
+<p class="hint">Lipidomics_post_hoc_analysis1.2/main.cmd (or .ish) exists in the working directory; the "Analyze Wide Dataframe" button below will execute it.</p>
+
+</body>
+</html>
