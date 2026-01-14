@@ -1,6 +1,9 @@
 Welcome to Kinetic Lipidomics!
 
 FIRST TIME USERS NOTE: 
+Long file paths can be a Major issue for windows machines. In order to prevent issues with our installation wizard please put the Lipidomics_Kinetics_Workflow2 into a folder close
+to the root of what ever drive it is saved in (for example, Downloads/Lipidomics_Kinetics_Workflow2 or D:Lipidomics_Kinetics_Workflow2 both work great). 
+
 We need to set up the python environments. There is two ways you can do this:
 A) Easiest if Anaconda is on your home system. 
 	-Using the Anaconda command prompt navigate to the Lipidomics_Kinetic_Workflow2 folder with "cd".
