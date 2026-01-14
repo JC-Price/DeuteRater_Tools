@@ -44,6 +44,8 @@ If you are interested in working with or editing the .py files for your own use.
 "conda env create -f Kinetic_lipidomics.yml" will turn Kinetic_lipidomics.yml  into a Microsoft OS anaconda environment that you can use on your own system to mimic the exact 
 conditions that we used in the development of this package.
 
+The same goes for DeuteRaterEnvironment.yml, which is the unique DeuteRater-specific environment that we use.
+
 We wish you the best as you attempt to either recreate our results with our publicly-available raw data (include link here), or with data of your own. 
 
 IF you have any questions or comments, Coleman Nielsen, the first author on Nielsen et al. 2026, or the corresponding author, John C. Price can be contacted at nielsen.coleman2@gmail.com or 
