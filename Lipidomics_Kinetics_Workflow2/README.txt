@@ -25,6 +25,8 @@ B) You can retrieve them from our Box server with:
 
 
 	-Store these within the root of Lipidomics_Kinetic_Workflow2.
+
+
 Then you will need to set up the python environments by clicking the Kinetic_Lipidomics_Environment_Wizard.cmd before you do anything else. This 
 will extract the necessary python environment and ensure that the hard-coded paths used by the various internal python packages are pointing to the correct places. This process will remove 
 the .tar.gz zipped files as it unwraps and activates them. Then it will remove itself. 
