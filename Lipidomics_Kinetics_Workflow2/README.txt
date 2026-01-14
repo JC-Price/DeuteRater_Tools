@@ -19,9 +19,9 @@ A) Easiest if Anaconda is on your home system.
 		-conda pack -n Kinetic_Lipidomics
 
 B) You can retrieve them from our Box server with:
-	- https://byu.box.com/s/mvuvyljxqprvjpv94u5apvmtoc9nkeao
+	- https://byu.box.com/s/jfhbbwbt6fiuc6ev71n8rsralx15ut86 (Kinetic_Lipidomics.tar.gz)
 & 
-	- https://byu.box.com/s/jfhbbwbt6fiuc6ev71n8rsralx15ut86
+	- https://byu.box.com/s/mvuvyljxqprvjpv94u5apvmtoc9nkeao (DeuteRaterEnvironment.tar.gz)
 
 
 	-Store these within the root of Lipidomics_Kinetic_Workflow2.
