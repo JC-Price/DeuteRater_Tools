@@ -46,6 +46,9 @@ from tkinter import filedialog, messagebox
 from typing import List, Tuple, Optional, Dict
 import deuterater.settings as settings
 import traceback
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
 
 # Spacing (multi-moment) controls
 MOMENT_WEIGHT_SCHEME= "variance"        # "variance" or "harmonic"
