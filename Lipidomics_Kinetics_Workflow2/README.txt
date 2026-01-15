@@ -10,13 +10,11 @@ A) Easiest if Anaconda is on your home system.
 	-Run the following commands in the Anaconda command prompt:
 		-conda env create -f DeuteRaterEnvironment.yml
 		-conda pack -n DeuteRaterEnvironment
-		-conda env create -f DeuteRaterEnvironment.yml
-		-conda pack -n DeuteRaterEnvironment
+
 
 		-conda env create -f Kinetic_Lipidomics.yml
 		-conda pack -n Kinetic_Lipidomics
-		-conda env create -f Kinetic_Lipidomics.yml
-		-conda pack -n Kinetic_Lipidomics
+
 
 B) You can retrieve them from our Box server with:
 	- https://byu.box.com/s/jfhbbwbt6fiuc6ev71n8rsralx15ut86 (Kinetic_Lipidomics.tar.gz)
