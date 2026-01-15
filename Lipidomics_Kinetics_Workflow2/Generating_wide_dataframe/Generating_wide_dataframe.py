@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Merge Rates → Fraction-New → Metadata
+Merge Rates → Fraction-New → Concatenated ID file
 =====================================
 
 • Rates joins Fraction-New by analyte_id ↔ Lipid Unique Identifier
-• Fraction-New joins Metadata by Alignment ID
+• Fraction-New joins Concatenated ID file by Alignment ID
 • Outputs one master table keyed by Alignment ID
 """
 
@@ -135,7 +135,7 @@ def main() -> None:
     if not fn_path: sys.exit()
     rates_path = filedialog.askopenfilename(title="Select *Rates* table")
     if not rates_path: sys.exit()
-    id_path = filedialog.askopenfilename(title="Select *Metadata* table")
+    id_path = filedialog.askopenfilename(title="Select *Concatenated ID file* table")
     if not id_path: sys.exit()
 
     frac = read_any(fn_path)
@@ -221,7 +221,7 @@ def main() -> None:
     else:
         rates_wide = rates.copy()
 
-    # ─── Merge Fractions + Rates + Metadata ───
+    # ─── Merge Fractions + Rates + Concatenated ID file ───
     merged_rf = frac_wide.merge(rates_wide, left_on=frac_lui_col, right_on=rates_analyte_col, how="outer")
     if id_align_col in id_df.columns:
         merged = merged_rf.merge(id_df, left_on=frac_align_col, right_on=id_align_col, how="left")
@@ -252,7 +252,7 @@ def main() -> None:
     elif "nH_x" in merged.columns:
         merged = merged.rename(columns={"nH_x": "nH"})
     elif "nH_y" in merged.columns:
-        # If only _y exists (e.g., came from Rates or Metadata), keep it but canonicalize
+        # If only _y exists (e.g., came from Rates or Concatenated ID file), keep it but canonicalize
         merged = merged.rename(columns={"nH_y": "nH"})
     
     # Now drop other _x/_y columns created by the merge — but do not drop protected columns
