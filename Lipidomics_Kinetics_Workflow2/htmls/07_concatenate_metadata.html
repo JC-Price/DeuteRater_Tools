@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Concatenation of Metadata</title>
+  <title>Concatenation of Standardized ID files</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -46,18 +46,18 @@
 </head>
 <body>
 
-<h1>Concatenation of Metadata</h1>
+<h1>Concatenation of Standardized ID files</h1>
 
 <div class="box">
   <h2>Purpose of this step</h2>
   <p>
-    This step merges metadata from both <strong>positive</strong> and <strong>negative</strong> ionization modes
+    This step merges our standardized ID files
     into a single dataset. If you have been processing both polarities in parallel, concatenation is necessary
     before constructing the <em>wide metabolic metric table</em> used for kinetic and statistical analysis.
   </p>
 
   <p>
-    The goal is to produce a unified metadata table linking each lipid species to its kinetic and abundance metrics —
+    The goal is to produce a unified table linking each lipid species to its kinetic and abundance metrics —
     including <em>n<sub>L</sub></em> (incorporable deuterium count), <em>A<sub>syn</sub></em> (fraction of endogenous synthesis),
     <em>k</em> (turnover rate constant), and measured abundances. This integration step enables per-condition comparisons
     and downstream statistical modeling.
@@ -76,7 +76,7 @@
     The helper tool will:
   </p>
   <ol>
-    <li>Prompt you to select your <strong>negative-mode</strong> metadata file first, followed by the <strong>positive-mode</strong> file.</li>
+    <li>Prompt you to select your <strong>negative-mode</strong> file first, followed by the <strong>positive-mode</strong> file.</li>
     <li>Append a <code>polarity</code> column to each file.</li>
     <li>Stack the rows and create one combined, standardized dataframe.</li>
     <li>Prompt you to select a save location for the concatenated file.</li>
@@ -91,18 +91,18 @@
 <div class="box">
   <h2>Outputs</h2>
   <ul>
-    <li><strong>Concatenated metadata file</strong> — a single table containing all lipid entries from both modes.</li>
+    <li><strong>Concatenated ID file</strong> — a single table containing all lipid entries from both modes.</li>
     <li><strong>Polarity column</strong> (<code>positive</code> or <code>negative</code>) added for filtering and quality control.</li>
     <li>Ready input for the next step: <em>wide metabolic metric generation</em>, where kinetic parameters
         (<em>n<sub>L</sub></em>, <em>A<sub>syn</sub></em>, <em>k</em>, and abundance) will be merged into one comprehensive dataset.</li>
   </ul>
 </div>
 
-<a href="run:Concatenate_positive_and_negative\Concatenate_positive_and_negative.cmd" data-label="Concatenate Metadata">
-  <div class="hidden-run">Concatenate Metadata</div>
+<a href="run:Concatenate_positive_and_negative\Concatenate_positive_and_negative.cmd" data-label="Concatenate Standardized ID files">
+  <div class="hidden-run">Concatenate Standardized ID files</div>
 </a>
 
-<p class="hint">If Concatenate_positive_and_negative\Concatenate_positive_and_negative.cmd (or ish) exists in the working directory, the “Concatenate Metadata” button will appear below and execute it.</p>
+<p class="hint">If Concatenate_positive_and_negative\Concatenate_positive_and_negative.cmd (or ish) exists in the working directory, the “Concatenate Standardized ID files” button will appear below and execute it.</p>
 
 <p class="hint">
   The helper accepts tabular files (CSV, TSV, or Excel) exported from your standardized guidefiles
