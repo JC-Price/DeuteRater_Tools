@@ -20,16 +20,33 @@ def hash_py_file(file_path: Path, root: Path) -> bytes:
     return sha.digest()
 
 def compute_py_files_fingerprint(root: Path) -> bytes:
-    """Compute combined hash of all .py files using parallel processing."""
+    """Compute combined hash of selected .py files."""
     root = root.resolve()
+
+    EXCLUDED_DIRS = {"DeuteRater_python", "shared_python"}
+    ROOT_ALLOWED_FILES = {"Lipid_Kinetics_Workflow2.py"}
+
     py_files = []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames.sort()
-        filenames.sort()
-        for name in filenames:
-            if name.endswith(".py"):
-                py_files.append(Path(dirpath) / name)
+        dirpath = Path(dirpath)
+
+        # Remove excluded directories from traversal
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in EXCLUDED_DIRS
+        )
+
+        # Case 1: root directory → only allow specific files
+        if dirpath == root:
+            for name in sorted(filenames):
+                if name in ROOT_ALLOWED_FILES:
+                    py_files.append(dirpath / name)
+
+        # Case 2: subdirectories → include all .py files
+        else:
+            for name in sorted(filenames):
+                if name.endswith(".py"):
+                    py_files.append(dirpath / name)
 
     combined_sha = hashlib.sha256()
     with ThreadPoolExecutor() as executor:
@@ -37,6 +54,7 @@ def compute_py_files_fingerprint(root: Path) -> bytes:
             combined_sha.update(file_hash)
 
     return combined_sha.digest()
+
 
 def derive_key_from_fingerprint(fp: bytes) -> str:
     """Return a hex representation of the derived key."""
