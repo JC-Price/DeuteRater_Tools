@@ -125,7 +125,7 @@
     <tr><td>S/N cutoff</td><td>1.5 × σ</td><td>σ estimated from local baseline region.</td></tr>
   </table>
 
-  <h2>Process overview</h2>
+  <h2>Automated process overview</h2>
   <ol>
     <li><strong>Build EICs per run:</strong> Extract MS-DIAL-guided targets from each <code>.mzML</code>.</li>
     <li><strong>Fit morphs:</strong> Align each run to the reference using Legendre polynomials (ref ↔ target) via SciPy optimization.</li>
@@ -136,6 +136,17 @@
   </ol>
 
   <p class="hint">*Although Isobar Handler can estimate abundances via Gaussian fitting, all abundance values in our kinetic analysis are taken from DeuteRater.</p>
+
+
+  <h2>Steps to use</h2>
+  <ol>
+    <li>Load your CSV file with the <strong>Load CSV</strong> button.</li>
+    <li>Click <strong>Automated Alignment.</strong></li>
+    <li>The program will ask you to choose a reference <code>.mzML</code> file. Select it.</li>
+    <li>The program will then ask you to select all of the files to be aligned. Select all of them <strong> including the previously chosen reference file. </strong>
+    <li>When the alignment is finished click <strong>Export Project </strong>, where you will choose an output location for <strong>results</strong> files. This is where your <strong>final dataframe</strong> (important for next steps) will be found.</li>
+  </ol>
+
 
 <!-- Add image reference -->
 <figure style="text-align:center; max-width:600px; margin: 0 auto;">
