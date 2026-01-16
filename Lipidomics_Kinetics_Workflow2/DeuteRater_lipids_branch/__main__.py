@@ -779,20 +779,22 @@ class MainGuiObject(QtWidgets.QMainWindow, loaded_ui):
     # ensures a folder exists by making it if it does not.
     @staticmethod
     def make_folder(folder, non_graph=False):
-        # don't care about overwriting graph folder, that is necessary.
-        # the main output folder might have necessary things in it the user wants to keep
+        # non_graph folders: keep existing contents
         if non_graph:
             if not os.path.isdir(folder):
-                os.makedirs(folder)
+                os.makedirs(folder, exist_ok=True)
+
+        # graph folders: always recreate
         else:
             if os.path.isdir(folder):
-
-                # changes file permissions to avoid errors removing files with read-only permissions
+                # changes file permissions to avoid errors removing read-only files
                 def on_rm_error(func, path, exc_info):
                     os.chmod(path, 0o777)
                     func(path)
+
                 rmtree(folder, onerror=on_rm_error)
-            os.makedirs(folder)
+
+            os.makedirs(folder, exist_ok=True)
 
     # since the users will mainly be filling in a template we need to check the input.  we need to check that the appropriate columns have data in them
     # if there is something that we can autofill, we'll do that in the extractor itself since that is already reading in the file
