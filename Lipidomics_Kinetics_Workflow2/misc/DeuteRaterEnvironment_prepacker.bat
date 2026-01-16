@@ -3,6 +3,8 @@
 echo.
 echo ================================================
 echo   Fixing DeuteRaterEnvironment for conda-pack
+echo If for some reason we need to go from DeuteRaterEnvironment.yml --> Anaconda Environment --> DeuteRaterEnvironment.tar.gz --> DeuteRater_python (the folder) 
+echo this program will fix the directories so DeuteRater will actually properly run (through the local python.exe within DeuteRater_python (folder))
 echo ================================================
 echo.
 
@@ -85,3 +87,4 @@ echo     conda-pack -n DeuteRaterEnvironment -o DeuteRaterEnvironment.tar.gz
 echo.
 
 pause
+
