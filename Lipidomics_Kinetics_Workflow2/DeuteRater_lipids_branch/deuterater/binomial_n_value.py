@@ -1189,25 +1189,29 @@ def simple_r2_score(y_true, y_pred):
     return 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
 
 
-def compute_boot_stats(boot: np.ndarray,
-                       trim_bins: int = 40,
-                       density_frac: float = 0.30,
-                       median_frac_width: float = 0.25):
+def compute_boot_stats(
+    boot: np.ndarray,
+    trim_bins: int = 40,
+    density_frac: float = 0.30,
+    median_frac_width: float = 0.25,
+):
     """
     Standardized BA/BS resampling pipeline: trim → SE/CI → Gaussian R².
-    Returns: boot_trimmed, se(3,), ci_text(3,), n_kept_cols(list[3]), r2_gauss(3,)
+    Returns: boot_trimmed, se(3,), ci(3 lists), n_kept_cols(list[3]), r2_gauss(3,)
     """
+
     boot = np.asarray(boot, float)
     if boot.ndim != 2 or boot.shape[1] < 3:
         return (
             np.full((1, 3), np.nan),
             np.full(3, np.nan),
-            ["[nan, nan]"] * 3,
+            [[np.nan, np.nan]] * 3,
             [0, 0, 0],
             np.full(3, np.nan),
         )
 
     cols_trim, n_kept_cols, r2_gauss = [], [], []
+
     for j in range(boot.shape[1]):
         x = boot[:, j]
         x = x[np.isfinite(x)]
@@ -1217,7 +1221,7 @@ def compute_boot_stats(boot: np.ndarray,
             r2_gauss.append(np.nan)
             continue
 
-        # --- density trim ---
+        # ----- density trimming -----
         hist, edges = np.histogram(x, bins=trim_bins, density=True)
         if hist.size and np.any(hist > 0):
             cutoff = density_frac * hist.max()
@@ -1227,37 +1231,44 @@ def compute_boot_stats(boot: np.ndarray,
                 x_max = edges[::-1][np.argmax(mask_bins[::-1])]
                 x = x[(x >= x_min) & (x <= x_max)]
 
-        # --- median range trim ---
+        # ----- median-range trimming -----
         med = np.median(x)
         rng = np.nanmax(x) - np.nanmin(x)
         if np.isfinite(rng) and rng > 0:
             lo, hi = med - median_frac_width * rng, med + median_frac_width * rng
             x = x[(x >= lo) & (x <= hi)]
 
-        # --- Gaussian R² fit ---
+        # ----- Gaussian R² fit -----
         if len(x) >= 10 and np.nanstd(x) > 0:
             mu, sd = np.nanmean(x), np.nanstd(x, ddof=1)
             y_obs, bins = np.histogram(x, bins=trim_bins, density=True)
             centers = (bins[:-1] + bins[1:]) / 2
             y_pred = norm.pdf(centers, mu, sd)
             r2_gauss.append(simple_r2_score(y_obs, y_pred))
-
         else:
             r2_gauss.append(np.nan)
 
         cols_trim.append(x)
         n_kept_cols.append(len(x))
 
+    # pad to rectangle
     max_len = max(len(c) for c in cols_trim) if cols_trim else 0
-    boot_trimmed = (
-        np.column_stack([np.pad(c, (0, max_len - len(c)), constant_values=np.nan) for c in cols_trim])
-        if max_len else np.full((1, 3), np.nan)
-    )
+    if max_len:
+        boot_trimmed = np.column_stack([
+            np.pad(c, (0, max_len - len(c)), constant_values=np.nan)
+            for c in cols_trim
+        ])
+    else:
+        boot_trimmed = np.full((1, 3), np.nan)
 
+    # standard errors
     se = np.nanstd(boot_trimmed, axis=0, ddof=1)
+
+    # 95% CIs (numeric)
     lo = np.nanpercentile(boot_trimmed, 2.5, axis=0)
     hi = np.nanpercentile(boot_trimmed, 97.5, axis=0)
-    ci = [f"[{l:.3g}, {h:.3g}]" for l, h in zip(lo, hi)]
+    ci = [[float(f"{l:.3g}"), float(f"{h:.3g}")] for l, h in zip(lo, hi)]
+
     return boot_trimmed, se, ci, n_kept_cols, np.array(r2_gauss)
 
 
