@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Isobar Handler — Retention-Time Morph & Summed EICs</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    em { color: #444; }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    ul { margin-top: 6px; }
+    .param-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 0.95rem;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .param-table th, .param-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eef3f7;
+      text-align: left;
+    }
+    .param-table th {
+      background: #f7fbfe;
+      color: #1f618d;
+      font-weight: 600;
+    }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Isobar Handler — Retention-Time Morph & Summed EICs</h1>
+
+<div class="box">
+
+  <h2>Purpose of this step</h2>
+  <p>
+    Accurate kinetic quantification depends on consistent isotopic envelope extraction across all samples.
+    Even small retention-time drifts between runs can distort extracted-ion chromatograms (EICs), causing
+    mis-sampled envelopes, noise in turnover fits, or misassignment of overlapping isobars (molecules with the same molecular mass).
+    <strong>Isobar Handler</strong> resolves these issues by aligning retention times empirically using a Legendre-polynomial
+    morph and generating a summed reference frame that highlights "real" analytes.
+  </p>
+
+  <h2>Why alignment is essential</h2>
+  <ul>
+    <li><strong>Single-RT assumptions:</strong> Using one retention time per lipid across all <code>.mzML</code> files forces envelope sampling at fixed times, ignoring slight differences in the chromatography between runs. This results in our kinetic software DeuteRater sampling the wrong retention time space, adding noise to our kinetic analysis.</li>
+    <li><strong>Direct MS-DIAL transfer:</strong>Retention time differences can cause MS-DIAL to identify the same lipid at multiple retention times, producing artificial duplicates and biologically impossible abundance fold-changes.</li>
+  </ul>
+
+  <h2>Our approach — Legendre morph and summed reference frame</h2>
+  <p>
+    Each run is aligned to a reference MS¹ file (selected or auto-chosen) using a <em>Legendre polynomial</em>
+    of configurable degree (default <strong>5</strong>), with coefficients optimized via <em>SciPy’s differential-evolution</em> solver.
+    All EICs are then morphed into the reference time frame, summed, and normalized to stabilize peak centers.
+    Peaks within ±30 seconds (typical ±15–30 s) of the reference RT on the summed trace are retained.
+  </p>
+  <p>
+    Candidate peaks must satisfy <strong>percent-of-max</strong> (default 5%), <strong>S/N</strong> (default 1.5× baseline σ),
+    and <strong>absolute-intensity</strong> thresholds. After summing together and picking peaks within the reference frame, each accepted center has an inverse polynomial applied and is subsequently <em>snapped</em> to the local maximum
+    in its native file. DeuteRater subsequently samples
+    <strong>file-specific, peak-centered RTs</strong>, ensuring reproducible envelope extraction for kinetic modeling.
+  </p>
+
+  <h2>Inputs</h2>
+  <ul>
+    <li>Prepared Guidefile originating from MS Dial and converted to IH/DR column syntax</li>
+    <li><strong>MS<sup>1</sup></strong> files to be aligned.</li>
+<p class="hint"> Note: All of our <strong>MS<sup>2</sup></strong> <code>.mzMLs</code> are labeled 'PQC' so we filter the files we need with the File Explorer search command "NOT PQC AND *.mzML". You can do something similar.</p>
+    <li>A designated reference <code>.mzML</code>.</li>
+  </ul>
+
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>Per-file refined RTs</strong> used for downstream DeuteRater analysis.</li>
+    <li><strong>QC plots</strong> showing summed-vs-reference mTIC overlays and per-lipid summaries.</li>
+    <li>A portable project archive containing all cached data and parameters for reproducibility.</li>
+  </ul>
+
+  <h2>Typical parameters (defaults)</h2>
+  <table class="param-table">
+    <tr><th>Component</th><th>Default</th><th>Notes</th></tr>
+    <tr><td>Legendre degree</td><td>5</td><td>Configurable; governs polynomial smoothness.</td></tr>
+    <tr><td>Fit downsampling</td><td>1/25</td><td>Improves computational efficiency.</td></tr>
+    <tr><td>Peak window</td><td>±30 s</td><td>Tunable; ±15–30 s typical for lipidomics data.</td></tr>
+    <tr><td>Percent-of-max cutoff</td><td>5 %</td><td>Applied to normalized summed trace.</td></tr>
+    <tr><td>S/N cutoff</td><td>1.5 × σ</td><td>σ estimated from local baseline region.</td></tr>
+  </table>
+
+  <h2>Automated process overview</h2>
+  <ol>
+    <li><strong>Build EICs per run:</strong> Extract MS-DIAL-guided targets from each <code>.mzML</code>.</li>
+    <li><strong>Fit morphs:</strong> Align each run to the reference using Legendre polynomials (ref ↔ target) via SciPy optimization.</li>
+    <li><strong>Unify and sum:</strong> Warp all EICs into the reference frame, sum normalized traces, and verify absolute intensities.</li>
+    <li><strong>Select centers:</strong> Detect peaks within ±30 s of expected RTs; apply S/N and percent-of-max filters.</li>
+    <li><strong>Back-transform:</strong> Map centers back to native files, snap to local maxima, and export <code>*_RT_sec</code> and <code>*_Abn</code> tables.</li>
+    <li><strong>Normalize and export:</strong> Apply TIC normalization*, generate QC plots, and save the reproducible project archive.</li>
+  </ol>
+
+  <p class="hint">*Although Isobar Handler can estimate abundances via Gaussian fitting, all abundance values in our kinetic analysis are taken from DeuteRater.</p>
+
+
+  <h2>Steps to use</h2>
+  <ol>
+    <li>Load your CSV file with the <strong>Load CSV</strong> button.</li>
+    <li>Click <strong>Automated Alignment.</strong></li>
+    <li>The program will ask you to choose a reference <code>.mzML</code> file. Select it.</li>
+    <li>The program will then ask you to select all of the files to be aligned. Select all of them <strong> including the previously chosen reference file. </strong>
+    <li>When the alignment is finished click <strong>Export Project </strong>, where you will choose an output location for <strong>results</strong> files. This is where your <strong>final dataframe</strong> (important for next steps) will be found.</li>
+  </ol>
+
+
+<!-- Add image reference -->
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Peak_picking_with_isobar_handler.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong> Example of Summed Peak-Picking:</strong> After converting all files into a common reference frame and summing the extracted ion chromatograms from each file (shown below in different colors), we can identify species that are consistently observed across files with the strongest signal. In this example, we identified two distinct retention times for DG 19:2 that exhibit sufficient intensity to pass our filtering criteria. These retention times are then reverse-transformed on a per-file basis to generate file-specific retention times for both analytes, which are used in downstream analyses. The retention time windows are centered on the retention times originally detected by MS-Dial. For consistency, we retain only analytes that fall within these windows, thereby relying on MS-Dial for initial retention time detection.
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+</div>
+
+
+<!-- GUI anchor -->
+<!-- GUI anchor -->
+<a href="run:isobar_handler_gui/isobar_gui.cmd" data-label="Run Isobar Handler">
+  <div class="hidden-run">Run Isobar Handler</div>
+</a>
+
+<p class="hint">If <code>isobar_handler_gui\isobar_gui.cmd  (or ish)</code> is in your working directory, the “Run Isobar Handler” button will appear below and execute it.</p>
+
+</body>
+</html>

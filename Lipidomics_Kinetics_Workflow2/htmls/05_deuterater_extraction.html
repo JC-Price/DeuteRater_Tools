@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DeuteRater — Extraction Step</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    em { color: #444; }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run { display: none; }
+    ul.checklist { margin-left: 1.2rem; }
+    ul.checklist li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+
+<h1>DeuteRater — Extraction</h1>
+
+<div class="box">
+  <h2>Purpose of this step</h2>
+  <p>
+    <strong>DeuteRater</strong> performs the core analytical task of kinetic mass spectrometry:
+    empirically measuring deuterium incorporation into each lipid’s isotopologue envelope.
+    This step establishes the data used to calculate the incorporable deuterium count (<em>n<sub>L</sub></em>),
+    the fraction of endogenously synthesized molecules (<em>A<sub>syn</sub></em>), and the turnover rate constant (<em>k</em>).
+  </p>
+
+  <p>
+    Extraction can be run independently when processing <strong>positive</strong> and <strong>negative</strong>
+    polarities before merging them (recommended). Doing so maximizes isotopic coverage and ensures that
+    standardized polarity identifiers from the previous step are recognized.
+  </p>
+
+  <h2>How to run extraction</h2>
+  <ol>
+    <li>Click <strong>Open DeuteRater</strong> below.</li>
+    <li>Select <strong>Lipidomics</strong> mode.</li>
+    <li>Deselect all processing steps except <strong>Extraction</strong>.</li>
+    <li>Modify the settings as needed (we recommend loading up "Recommended_DeuteRater_settings.yaml" which reflect the settings used in <em>Nielsen et al., 2026</em>).
+    <li>Run Extraction separately for positive and negative modes, placing the resulting <code>.tsv</code> files into the same directory for combined polarity analysis.</li>
+  </ol>
+
+  <h2>Required settings</h2>
+  <ul class="checklist">
+    <li><strong>Asymptote Calculation</strong>: set to <strong>Variable</strong>.</li>
+    <li><strong>Calculate Experimental N-Values</strong>: <strong>On</strong>.</li>
+  </ul>
+
+  <p class="hint">
+    <em>*The incorporable deuterium count (<strong>n<sub>L</sub></strong>)</em> represents the number of hydrogen positions that can exchange with deuterium under metabolic labeling.
+    Unlike peptides, lipid <em>n<sub>L</sub></em> values are not predicted from structure alone and must be determined empirically under the same biological conditions
+    (see <em>Nielsen et al., 2026</em>).
+  </p>
+
+  <h2>Recommended Settings </h2>
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/DeuteRater_settings.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:100%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+    <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+  <h2>Example settings file</h2>
+  <p>
+    This package includes a settings file matching the configuration used in <em>Nielsen et al., 2026</em>.
+    Import <code>Recommended_DeuteRater_settings.yaml</code> into DeuteRater to replicate our analysis.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Output</h2>
+  <p>
+    DeuteRater produces extraction outputs per run, containing isotopologue intensities and fitted parameters
+    required for kinetic modeling. When performing the combined-polarity workflow, ensure both polarities
+    share the same standardized lipid identifiers from the previous step.
+  </p>
+</div>
+
+<a href="run:DeuteRater_lipids_branch\__main__.cmd" data-label="Open DeuteRater">
+  <div class="hidden-run">Open DeuteRater</div>
+</a>
+
+<p class="hint">If DeuteRater_lipids_branch\__main__.cmd</code>is present, the “Open DeuteRater” button will initialize it.
+
+</p>
+
+</body>
+</html>

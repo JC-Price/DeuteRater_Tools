@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "L5L//2BQ0L4=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\colem\\Downloads\\Kinetic_Lipidomics\\Lipidomics_Kinetics_Workflow2\\DeuteRater_lipids_branch\\__main__.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\colem\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.23\\microsoft.net.illink.tasks.8.0.23.nupkg.sha512",
+    "C:\\Users\\colem\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.23\\microsoft.netcore.app.runtime.win-x64.8.0.23.nupkg.sha512",
+    "C:\\Users\\colem\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.23\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.23.nupkg.sha512",
+    "C:\\Users\\colem\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.23\\microsoft.aspnetcore.app.runtime.win-x64.8.0.23.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Standardizing Polarity Syntax (POS + NEG)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    ul, ol {
+      margin-left: 18px;
+    }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Standardizing Polarity Syntax (Positive + Negative)</h1>
+
+<div class="box">
+
+  <h2>Goal</h2>
+<p>
+  When lipid species are measured in both <strong>positive</strong> and <strong>negative</strong> ionization modes
+  under identical chromatographic conditions, they elute at the same retention time but may be reported under
+  different identifiers. These identifiers reflect the degree of structural information that can be resolved in
+  each polarity, as positive and negative modes produce different, polarity-specific fragment ions.
+  This step <strong>standardizes lipid naming across polarities</strong> so that all adduct forms of a lipid map to
+  a <strong>single, unified identifier</strong>, with the most structurally informative (highest-resolution)
+  identifier retained.
+</p>
+
+  <p>
+    <strong>Result:</strong> Positive- and negative-mode entries referring to the same lipid share the same
+    <code>Lipid Unique Identifier</code>, enabling a single kinetic trajectory downstream.
+  </p>
+
+
+<!-- Add image reference -->
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Lipid_structural_pyramid.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong>Lipid Structural Pyramid:</strong> The lipid structural pyramid illustrates increasing levels of structural resolution in lipid annotation. At the base is sum composition, which reports the lipid class and headgroup along with the total number of fatty acid carbons and double bonds (e.g., PC 34:1). Fatty acid composition identifies the individual fatty acids present (e.g., 16:0 & 18:1) but not their positions. sn-Positional resolution specifies which fatty acid is attached at the sn-1 and sn-2 positions of the glycerol backbone, where the fatty acid to the left of the slash (/) is at sn-1 and the fatty acid to the right is at sn-2 (e.g., 16:0/18:1). At the highest level, double-bond positions define the locations of unsaturations using Δ (counting from the carboxyl carbon) or ω (counting from the methyl end) notation, and may include cis/trans geometry.  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+  <h2>Naming Standardization Rules</h2>
+  <ol>
+    <li>
+      <strong>Sum Composition Extraction</strong><br>
+      The <code>Sum Composition</code> is defined as the substring of
+      <code>Lipid Unique Identifier</code> before the first <code>|</code>.
+    </li>
+
+    <li>
+      <strong>Cross-Polarity Matching</strong><br>
+      Positive- and negative-mode lipids are eligible for merging if:
+      <ul>
+        <li>Their <code>Sum Composition</code> is identical, and</li>
+        <li>Their retention times differ by ≤ <code>overlap time</code> seconds (default: 6).</li>
+      </ul>
+    </li>
+
+    <li>
+      <strong>Canonical Identifier Selection</strong><br>
+      When a positive/negative pair is matched, the more descriptive identifier
+      (longer string) is selected and written back to <em>both</em> entries.
+    </li>
+  </ol>
+
+  <h2>Other Pre-processing Steps</h2>
+  <ul>
+    <li><strong>D7 standard detection:</strong> Rows with <code>cf</code> containing <code>D7</code> are labeled <code>D7-standard = True</code>.</li>
+    <li><strong>Deuterium normalization:</strong> All deuterium (<code>D</code>) atoms are merged into hydrogen (<code>H</code>) counts in <code>cf</code> and <code>Adduct_cf</code>.</li>
+    <li><strong>Formula cleanup:</strong> A single consolidated hydrogen count is retained; redundant H/D tokens are removed.</li>
+  </ul>
+
+  <h2>Why This Step Exists</h2>
+  <ul>
+    <li>Prevents duplicate lipid identities across polarities</li>
+    <li>Ensures all adducts contribute to a single kinetic model</li>
+    <li>Preserves the most informative lipid annotation</li>
+  </ul>
+
+  <h2>Inputs and Outputs</h2>
+  <ul>
+    <li><strong>Inputs:</strong>
+      <ul>
+        <li>Positive-mode CSV</li>
+        <li>Negative-mode CSV</li>
+      </ul>
+    </li>
+    <li><strong>Outputs:</strong>
+      <ul>
+        <li>Positive-mode CSV with standardized identifiers</li>
+        <li>Negative-mode CSV with standardized identifiers</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>User Configuration</h2>
+  <p>
+    The only user-configurable parameter is <code>overlap time</code>, the retention-time tolerance (in seconds)
+    used for cross-polarity matching.
+  </p>
+  <p>
+    Recommended selection:
+  </p>
+  <ol>
+    <li>Compare a matched positive/negative run.</li>
+    <li>Identify the RT gap separating identical versus distinct lipids.</li>
+    <li>Set <code>overlap time</code> to avoid false merges while preserving true matches.</li>
+  </ol>
+
+</div>
+
+<a href="run:Standardize_positive_and_negative_lipid_IDs/Standardize_positive_and_negative_lipid_IDs.cmd"
+   data-label="Standardize Polarity Syntax">
+  <div class="hidden-run">Standardize Polarity Syntax</div>
+</a>
+
+<p class="hint">
+If <code>Standardize_positive_and_negative_lipid_IDs/Standardize_positive_and_negative_lipid_IDs.cmd (or ish)</code>
+exists in your working directory, the “Standardize Polarity Syntax” button will appear and execute it.
+</p>
+
+</body>
+</html>

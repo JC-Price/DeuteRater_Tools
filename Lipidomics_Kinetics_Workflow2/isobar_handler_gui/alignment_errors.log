@@ -1,0 +1,34 @@
+
+================================================================================
+Timestamp: 2026-01-12T17:19:21.190022
+CWD: H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui
+sys.executable: H:\dist\Lipidomics_Kinetics_Workflow2\shared_python\Kinetic_Lipidomics_env\python.exe
+argv: ['H:\\dist\\Lipidomics_Kinetics_Workflow2\\isobar_handler_gui\\\\isobar_gui.py']
+__file__: H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py
+Exception: NameError("name 'root' is not defined")
+Traceback:
+Traceback (most recent call last):
+  File "H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 2601, in automated_alignment
+    display_buttons()
+  File "H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 1847, in display_buttons
+    container = tk.Frame(root)
+                         ^^^^
+NameError: name 'root' is not defined
+
+
+================================================================================
+Timestamp: 2026-01-12T19:43:30.864313
+CWD: H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui
+sys.executable: H:\dist\Lipidomics_Kinetics_Workflow2\shared_python\Kinetic_Lipidomics_env\python.exe
+argv: ['H:\\dist\\Lipidomics_Kinetics_Workflow2\\isobar_handler_gui\\\\isobar_gui.py']
+__file__: H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py
+Exception: NameError("name 'root' is not defined")
+Traceback:
+Traceback (most recent call last):
+  File "H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 2601, in automated_alignment
+    display_buttons()
+  File "H:\dist\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 1847, in display_buttons
+    container = tk.Frame(root)
+                         ^^^^
+NameError: name 'root' is not defined
+

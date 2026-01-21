@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+      max-width: 960px;
+      margin: auto;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    h3 {
+      color: #333;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      font-size: 1.1rem;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    pre {
+      background: #eef3f7;
+      padding: 10px 14px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    em { color: #444; }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Lipidomic Kinetics — n<sub>L</sub> Component Deconvolution</h1>
+
+<div class="box">
+  <h2>Purpose of this step</h2>
+  <p>
+    The <strong>n<sub>L</sub> Component Deconvolution</strong> module transforms lipid-level kinetic data into
+    mechanistic, component-level understanding. Through a combination of 
+    <strong>Monte Carlo sampling</strong> and <strong>bootstrap-style sub-sampling linear algebra</strong>, 
+    it quantifies how much each lipid building block—fatty acid, glycerol backbone, and head group—
+    contributes to the total incorporable deuterium count (<em>n<sub>L</sub></em>) measured for each lipid species.
+  </p>
+</div>
+
+
+  <p>
+    This stage represents the culmination of the kinetic lipidomics workflow: transforming lipid-level
+    fraction-new and turnover data into interpretable biochemical rates that can be attributed to specific
+    molecular moieties.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Core concept</h2>
+  <p>
+    Each lipid species is composed of multiple structural components. By expressing lipids as linear combinations
+    of their components and solving:
+  </p>
+
+  <pre><code>A × x ≈ b</code></pre>
+
+  <p>
+    we infer <em>component-level</em> n-values (<code>x</code>) from the measured lipid data (<code>b</code>),
+    where the design matrix (<code>A</code>) encodes how frequently each component appears across lipids.
+  </p>
+  <p>
+    This allows empirical <em>n<sub>L</sub></em> values to be decomposed into biologically meaningful contributions,
+    illuminating how APOE genotype, diet, or age alters deuterium incorporation across lipid moieties.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Workflow overview</h2>
+  <ol>
+    <li><strong>Parsing </strong> — Extract fatty-acid chains and head-group identifiers from each lipid name.</li>
+    <li><strong>Design Matrix </strong> — Build the <code>A</code> matrix mapping lipids → components.</li>
+    <li><strong>Monte Carlo Sampling </strong> — Randomly sample lipid <em>n<sub>L</sub></em> values within asymmetric confidence bounds (split-normal distributions).</li>
+    <li><strong>Bootstrap Sub-sampling </strong> — Re-solve the system across many random lipid subsets, removing 5 % of lipids per iteration to reduce the influence of outliers and improve estimator robustness.</li>
+    <li><strong>Statistical Testing </strong> — Perform correlation-adjusted paired t-tests across genotypes or conditions.</li>
+    <li><strong>Visualization </strong> — Generate bar charts, conformity plots, and component-level histograms.</li>
+  </ol>
+</div>
+
+<div class="box">
+  <h2>Mathematical foundation</h2>
+  <p>For each genotype or experimental condition:</p>
+  <ul>
+    <li>Construct a design matrix <code>A</code> describing lipid-to-component relationships.</li>
+    <li>Sample observed lipid <code>n<sub>L</sub></code> values (<code>b</code>) within asymmetric 95 % confidence bounds using <code>_sample_asymmetric_normal</code>.</li>
+    <li>Solve the constrained least-squares system <code>lsq_linear(A, b, bounds = (0, ∞))</code> repeatedly to estimate component contributions.</li>
+    <li>Apply <strong>bootstrap sub-sampling</strong> by iteratively omitting 5 % of lipids per run; the median of all resampled solutions yields an outlier-resistant, stable estimate for each component’s <em>n<sub>L</sub></em>.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>Component summary (CSV)</strong> — Median <em>n<sub>L</sub></em> values and 95 % confidence intervals per genotype.</li>
+    <li><strong>Histograms</strong> — Monte Carlo simulation distributions for each component.</li>
+    <li><strong>Conformity plots</strong> — Baseline vs alternate genotype comparisons using correlation-adjusted t-tests.</li>
+    <li><strong>Bar plots</strong> — Component-level median ± CI summaries for intuitive comparison.</li>
+  </ul>
+</div>
+
+
+<a href="run:Lipidomics_component_analysis/main.cmd" data-label="Run nL Component Deconvolution">
+  <div class="hidden-run">Run n<sub>L</sub> Component Deconvolution</div>
+</a>
+
+<p class="hint">If Lipidomics_component_analysis\main.cmd (or ish) exists in the working directory, the “Run nL Component Deconvolution ” button will appear below and execute it.</p>
+
+
+<p class="hint">
+  Upon completion, component-level CSVs and plots will be saved automatically.
+  The results provide interpretable biochemical parameters that can be compared to theoretical or literature
+  <em>n<sub>L</sub></em> values (e.g., Lee 1994; Carson 2017) and integrated into turnover or flux analyses.
+</p>
+
+
+
+</body>
+</html>
