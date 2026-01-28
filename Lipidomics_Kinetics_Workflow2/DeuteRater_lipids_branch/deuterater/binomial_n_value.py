@@ -675,6 +675,156 @@ def collapse_D_by_time(dfD: pd.DataFrame, ID_COL: str, GROUP_COL: str, FORMULA_C
     print(f"[Step 2] collapsed → {len(collapsed)} rows (Averaged noise & abundances)")
     return collapsed
 
+
+def collapse_D_by_time(
+    dfD: pd.DataFrame,
+    ID_COL: str,
+    GROUP_COL: str,
+    FORMULA_COL: str,
+    TIME_COL: str,
+    Z_COL: str,
+    tol: float,
+    group_agnostic: bool = False,
+) -> pd.DataFrame:
+    """
+    Collapse replicate D_spectra by time (within ±tol), preserving enrichment.
+
+    If group_agnostic=True:
+        - collapse ignores GROUP_COL
+        - all output rows get GROUP_COL = "All"
+    """
+
+    if "enrichment" not in dfD.columns:
+        raise KeyError(
+            "[Step 2] 'enrichment' column is required in dfD but was not found. "
+            "Please merge or compute enrichment before running collapse_D_by_time()."
+        )
+
+    recs = []
+
+    # Choose grouping keys
+    if group_agnostic:
+        group_keys = [ID_COL, FORMULA_COL]
+    else:
+        group_keys = [ID_COL, GROUP_COL, FORMULA_COL]
+
+    for keys, g in dfD.groupby(group_keys):
+
+        if group_agnostic:
+            uid, cf = keys
+            grp = "All"
+        else:
+            uid, grp, cf = keys
+
+        tt = pd.to_numeric(g[TIME_COL], errors="coerce").to_numpy(float)
+        ok = np.isfinite(tt)
+        if not ok.any():
+            continue
+
+        g = g.iloc[np.where(ok)[0]]
+        tt = tt[np.where(ok)[0]]
+
+        clusters = _cluster_times(tt, tol)
+
+        for cl in clusters:
+            gg = g.iloc[cl]
+
+            # ----- COLLAPSE D_spectrum -----
+            Ds = np.vstack([
+                d for d in gg["D_spectrum"].to_numpy()
+                if isinstance(d, np.ndarray)
+            ])
+            if Ds.size == 0:
+                continue
+            mean_D = norm1(Ds.mean(axis=0))
+
+            # ----- enrichment -----
+            enrich_vals = pd.to_numeric(
+                gg["enrichment"], errors="coerce"
+            ).to_numpy(float)
+            ok_en = np.isfinite(enrich_vals)
+            if not ok_en.any():
+                continue
+            mean_enrich = float(enrich_vals[ok_en].mean())
+
+            # ----- collapsed metadata -----
+            rep_time = float(np.nanmean(tt[cl]))
+            iso_len  = int(np.median(pd.to_numeric(gg["iso_len"], errors="coerce")))
+            nH       = int(np.median(pd.to_numeric(gg["nH"], errors="coerce")))
+
+            # ----- COLLAPSE mz_array -----
+            mz_stack = np.vstack([
+                parse_num_seq(v, iso_len, pad_with=np.nan)
+                for v in gg["mz_array"].to_numpy()
+            ])
+            mean_mz = np.nanmean(mz_stack, axis=0)
+
+            z_med = float(np.nanmedian(pd.to_numeric(gg[Z_COL], errors="coerce")))
+
+            # ----- COLLAPSE signal_noise and abundances -----
+            import ast
+
+            sn_vals = []
+            for v in gg["signal_noise"]:
+                x = v
+                while isinstance(x, (list, tuple)) and len(x) == 1:
+                    x = x[0]
+                if isinstance(x, str):
+                    x = ast.literal_eval(x)
+                sn_vals.append(np.array(x, float))
+            mean_sn = np.mean(np.vstack(sn_vals), axis=0)
+
+            abn_vals = []
+            for v in gg["abundances"]:
+                x = v
+                while isinstance(x, (list, tuple)) and len(x) == 1:
+                    x = x[0]
+                if isinstance(x, str):
+                    x = ast.literal_eval(x)
+                abn_vals.append(np.array(x, float))
+            mean_abn = np.mean(np.vstack(abn_vals), axis=0)
+
+            recs.append([
+                uid, grp, cf, rep_time,
+                mean_D, mean_enrich,
+                iso_len, nH,
+                mean_mz, z_med,
+                mean_sn.tolist(),
+                mean_abn.tolist(),
+            ])
+
+    cols = [
+        ID_COL, GROUP_COL, FORMULA_COL, TIME_COL,
+        "D_spectrum", "enrichment", "iso_len", "nH",
+        "mz_array", Z_COL,
+        "signal_noise", "abundances",
+    ]
+
+    collapsed = pd.DataFrame(recs, columns=cols)
+
+    # TP_count definition depends on collapse mode
+    tp_group_keys = (
+        [ID_COL, FORMULA_COL]
+        if group_agnostic
+        else [ID_COL, GROUP_COL, FORMULA_COL]
+    )
+
+    collapsed["TP_count"] = (
+        collapsed
+        .groupby(tp_group_keys)[TIME_COL]
+        .transform("nunique")
+        .astype(int)
+    )
+
+    mode = "group-agnostic" if group_agnostic else "by-group"
+    print(f"[Step 2] collapsed ({mode}) → {len(collapsed)} rows")
+
+    return collapsed
+
+
+
+
+
 # ----------------------------------------------
 # 7) Binomial Abundance fit
 # ----------------------------------------------
@@ -1402,50 +1552,56 @@ def fit_one_pair_D(
         boot = []
         n_t = len(times)
 
+
+        boot = []
+        n_t = len(times)
+        
         for _ in range(n_boot):
-
             idx = rng.integers(0, n_t, size=n_t)
-
+        
             tb = times[idx]
             ob = obs[idx]
             Pb = P_t[idx]
-
-            nb = noises[idx]   # <-- correct weight resampling
-            eb = empiricals[idx]      # <-- correct weight resampling
-
+        
+            nb = noises[idx]        # <-- correct weight resampling
+            eb = empiricals[idx]    # <-- correct weight resampling
+        
             if asymptote_mode == "fixed" and user_Asyn_value is not None:
-
+        
                 def loss_b(x):
                     nL, k = x
                     A = user_Asyn_value
                     sim = _build_model_rows(nL, k, A, tb, iso_len, Pb)
                     return _weighted_rmsd(ob, sim, nb, eb)
-
+        
                 rb = minimize(
                     loss_b,
                     x0=[best[0], best[1]],
                     bounds=[(0.1, nH_max), (0.01, 5.0)],
                     method="L-BFGS-B"
                 ).x
-
+        
                 boot.append((rb[0], rb[1], user_Asyn_value))
-
+        
             else:
+        
                 def loss_b(x):
                     nL, k, A = x
                     sim = _build_model_rows(nL, k, A, tb, iso_len, Pb)
                     return _weighted_rmsd(ob, sim, nb, eb)
-
+        
                 rb = minimize(
                     loss_b,
                     x0=[best[0], best[1], best[2]],
                     bounds=[(0.1, nH_max), (0.01, 5.0), (0.0, 1.0)],
                     method="L-BFGS-B"
                 ).x
-
+        
                 boot.append((rb[0], rb[1], rb[2]))
-
+        
+        # ✅ convert once after the loop
         boot = np.asarray(boot, float)
+
 
         # ==================================================
         # 3) Trim → SE/CI → Gaussian R²
@@ -1519,7 +1675,7 @@ def _fit_abundance_one(args):
     nH_max = float(math.ceil(nH_base * 1.10))  # use ceil to actually grow small values
 
     # Perform fit with user-defined Asyn handling
-    out = fit_one_pair_D(sub_df, nH_max, asymptote_mode, user_Asyn_value, n_boot=n_boot, TIME_COL=TIME_COL, BOOT_SEED = None)
+    out = fit_one_pair_D(sub_df, nH_max, asymptote_mode, user_Asyn_value, n_boot=n_boot, TIME_COL=TIME_COL, BOOT_SEED = BOOT_SEED)
     if out is None:
         return None
 
@@ -1535,6 +1691,7 @@ def _fit_abundance_one(args):
 
 def perform_abundance_fit(
     collapsed: pd.DataFrame,
+    collapsed_all: pd.DataFrame,
     ID_COL: str,
     asymptote_mode: str,
     user_Asyn_value: Optional[float] = None,
@@ -1543,8 +1700,11 @@ def perform_abundance_fit(
     cores = 2,
     save_dir: Optional[str] = None,
     pool=None,
-    FORMULA_COL:str = None, TP_MIN: int = None,
-        GROUP_COL:str = None, TIME_COL = None, BOOT_SEED = None
+    FORMULA_COL: str = None,
+    TP_MIN: int = None,
+    GROUP_COL: str = None,
+    TIME_COL = None,
+    BOOT_SEED = None,
 ) -> pd.DataFrame:
     """Parallel Binomial-Abundance fit (BA_nL, BA_rate, BA_Asyn)."""
 
@@ -1555,7 +1715,9 @@ def perform_abundance_fit(
     # -----------------------
     if "Flag" in collapsed.columns:
         before = len(collapsed)
-        collapsed = collapsed.loc[collapsed["Flag"].astype(str).str.startswith("PASS")].copy()
+        collapsed = collapsed.loc[
+            collapsed["Flag"].astype(str).str.startswith("PASS")
+        ].copy()
         print(f"[{prefix}] Skipping flagged rows → kept {len(collapsed)}/{before} PASS")
     else:
         print(f"[{prefix}] No 'Flag' column found — fitting all rows.")
@@ -1575,8 +1737,11 @@ def perform_abundance_fit(
 
     before_filter = len(collapsed)
     collapsed = collapsed.loc[keep_mask].copy()
-    print(f"[{prefix}] Filtered analytes before fitting → kept {len(collapsed)}/{before_filter} "
-          f"(Flag=PASS, TP_count≥{TP_MIN}, valid D_spectrum)")
+    print(
+        f"[{prefix}] Filtered analytes before fitting → kept "
+        f"{len(collapsed)}/{before_filter} "
+        f"(Flag=PASS, TP_count≥{TP_MIN}, valid D_spectrum)"
+    )
 
     if collapsed.empty:
         print(f"[{prefix}] No analytes passed pre-fit filters — skipping {prefix} fitting.")
@@ -1591,12 +1756,24 @@ def perform_abundance_fit(
     os.makedirs(boot_dir, exist_ok=True)
 
     # -----------------------
-    # Build argument list for parallel fitting
+    # Build argument list for parallel fitting (per-group)
     # -----------------------
     groups = list(collapsed.groupby([ID_COL, GROUP_COL, FORMULA_COL], sort=False))
     args_list = [
-        (ID_COL, GROUP_COL, FORMULA_COL, TIME_COL, BOOT_SEED, uid, grp, cf, sub,
-         asymptote_mode, user_Asyn_value, n_boot)
+        (
+            ID_COL,
+            GROUP_COL,
+            FORMULA_COL,
+            TIME_COL,
+            BOOT_SEED,
+            uid,
+            grp,
+            cf,
+            sub,
+            asymptote_mode,
+            user_Asyn_value,
+            n_boot,
+        )
         for (uid, grp, cf), sub in groups
     ]
 
@@ -1604,29 +1781,115 @@ def perform_abundance_fit(
     print(f"[{prefix}] Fitting {total} analyte-group combinations ({cores} cores)")
 
     # -----------------------
-    # Parallel fitting
+    # Parallel fitting (per-group)
     # -----------------------
     results = _parallel_fit(
         _fit_abundance_one,
         args_list,
         n_cores=cores,
         pool=pool,
-        desc=f"{prefix} fitting"
+        desc=f"{prefix} fitting",
     )
 
     rows = [r for r in results if r is not None]
     df_fit = pd.DataFrame(rows)
 
+    # Early exit if nothing fit
     if df_fit.empty:
         print(f"[{prefix}] No successful abundance fits — skipping plots/outputs.")
         return df_fit
+
+    # -----------------------
+    # POOLED / NULL BOOTSTRAPS (no 'null' group rows)
+    # -----------------------
+    null_bootstrap_map = {}
+
+    pooled_args_list = []
+    for (uid, cf) in collapsed_all.groupby([ID_COL, FORMULA_COL]).groups.keys():
+        # Get ALL data for this analyte (all groups combined)
+        pooled_df = collapsed_all
+        
+        sub_pooled = pooled_df[
+            (pooled_df[ID_COL] == uid) &
+            (pooled_df[FORMULA_COL] == cf)
+        ]
+
+        pooled_args_list.append(
+            (
+                ID_COL,
+                GROUP_COL,
+                FORMULA_COL,
+                TIME_COL,
+                BOOT_SEED,
+                uid,
+                "null",       # label only, we won't keep this as a group row
+                cf,
+                sub_pooled,
+                asymptote_mode,
+                user_Asyn_value,
+                n_boot,
+            )
+        )
+
+    if pooled_args_list:
+        print(f"[{prefix}] Fitting {len(pooled_args_list)} pooled analyte distributions")
+
+        pooled_results = _parallel_fit(
+            _fit_abundance_one,
+            pooled_args_list,
+            n_cores=cores,
+            pool=pool,
+            desc=f"{prefix} pooled/null",
+        )
+
+        # Build map: (ID, FORMULA) -> pooled bootstrap array
+        for out in pooled_results:
+            if out is None:
+                continue
+            uid = out[ID_COL]
+            cf = out[FORMULA_COL]
+            boot_array = out.get("BA_resampling_samples")
+            if boot_array is not None and len(boot_array) > 0:
+                null_bootstrap_map[(uid, cf)] = boot_array
+
+    # -----------------------
+    # ADD PER-GROUP BOOTSTRAP COLUMNS
+    # -----------------------
+    df_fit["bootstrap_nL"] = None
+    df_fit["bootstrap_rate"] = None
+    df_fit["bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        boot_array = row.get("BA_resampling_samples")
+
+        if boot_array is not None and len(boot_array) > 0:
+            df_fit.at[idx, "bootstrap_nL"] = boot_array[:, 0].tolist()
+            df_fit.at[idx, "bootstrap_rate"] = boot_array[:, 1].tolist()
+            df_fit.at[idx, "bootstrap_Asyn"] = boot_array[:, 2].tolist()
+
+    # -----------------------
+    # ADD NULL BOOTSTRAP COLUMNS (same for all rows per analyte)
+    # -----------------------
+    df_fit["null_bootstrap_nL"] = None
+    df_fit["null_bootstrap_rate"] = None
+    df_fit["null_bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        key = (row[ID_COL], row[FORMULA_COL])
+        boot_null = null_bootstrap_map.get(key)
+        if boot_null is not None and len(boot_null) > 0:
+            df_fit.at[idx, "null_bootstrap_nL"] = boot_null[:, 0].tolist()
+            df_fit.at[idx, "null_bootstrap_rate"] = boot_null[:, 1].tolist()
+            df_fit.at[idx, "null_bootstrap_Asyn"] = boot_null[:, 2].tolist()
+
+    print(f"[{prefix}] Added per-group and null bootstrap sample columns to df_fit")
 
     # -----------------------
     # Plotting fits
     # -----------------------
     for (uid, grp, cf), sub in tqdm(
         collapsed.groupby([ID_COL, GROUP_COL, FORMULA_COL]),
-        desc=f"{prefix} plotting"
+        desc=f"{prefix} plotting",
     ):
         row_match = df_fit[
             (df_fit[ID_COL] == uid)
@@ -1645,9 +1908,400 @@ def perform_abundance_fit(
         P_s = pd.to_numeric(sub["enrichment"], errors="coerce").to_numpy(float)
         sim = _build_model_rows(nL, k, A, times, obs.shape[1], P_s)
         _save_fit_plot(uid, grp, plot_dir, prefix, times, obs, sim, (nL, k, A))
-    df_final = collapsed.merge(df_fit, on=[ID_COL, GROUP_COL, FORMULA_COL], how="inner")
+
+    # -----------------------
+    # Merge fits back to collapsed data
+    # -----------------------
+    df_final = collapsed.merge(
+        df_fit, on=[ID_COL, GROUP_COL, FORMULA_COL], how="inner"
+    )
     return df_final
 
+def perform_abundance_fit(
+    collapsed: pd.DataFrame,
+    collapsed_all: pd.DataFrame,
+    ID_COL: str,
+    asymptote_mode: str,
+    user_Asyn_value: Optional[float] = None,
+    n_boot: int = 1000,
+    tp_min: int = 3,
+    cores: int = 2,
+    save_dir: Optional[str] = None,
+    pool=None,
+    FORMULA_COL: str = None,
+    GROUP_COL: str = None,
+    TIME_COL: str = None,
+    BOOT_SEED: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    Parallel Binomial Abundance fit with SAFE null-bootstrap handling.
+    """
+
+    prefix = "BA"
+
+    # --------------------------------------------------
+    # 1) Pre-filter rows
+    # --------------------------------------------------
+    if "Flag" in collapsed.columns:
+        before = len(collapsed)
+        collapsed = collapsed.loc[
+            collapsed["Flag"].astype(str).str.startswith("PASS")
+        ].copy()
+        print(f"[{prefix}] Skipping flagged rows → kept {len(collapsed)}/{before}")
+
+    keep_mask = (
+        collapsed["D_spectrum"].notna()
+        & (pd.to_numeric(collapsed.get("TP_count", 0), errors="coerce") >= tp_min)
+    )
+
+    before = len(collapsed)
+    collapsed = collapsed.loc[keep_mask].copy()
+    print(
+        f"[{prefix}] Filtered analytes → kept "
+        f"{len(collapsed)}/{before} (TP_count ≥ {tp_min})"
+    )
+
+    if collapsed.empty:
+        print(f"[{prefix}] No analytes passed filters — skipping.")
+        return pd.DataFrame()
+
+    # --------------------------------------------------
+    # 2) Output directories
+    # --------------------------------------------------
+    plot_dir = os.path.join(save_dir, f"{prefix}_fit_plots")
+    boot_dir = os.path.join(save_dir, f"{prefix}_resampling_plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    os.makedirs(boot_dir, exist_ok=True)
+
+    # --------------------------------------------------
+    # 3) Build per-group fit arguments
+    # --------------------------------------------------
+    grouped = list(
+        collapsed.groupby([ID_COL, GROUP_COL, FORMULA_COL], sort=False)
+    )
+
+    args_list = [
+        (
+            ID_COL,
+            GROUP_COL,
+            FORMULA_COL,
+            TIME_COL,
+            BOOT_SEED,
+            uid,
+            grp,
+            cf,
+            sub,
+            asymptote_mode,
+            user_Asyn_value,
+            n_boot,
+        )
+        for (uid, grp, cf), sub in grouped
+    ]
+
+    print(f"[{prefix}] Fitting {len(args_list)} group-level analytes")
+
+    results = _parallel_fit(
+        _fit_abundance_one,
+        args_list,
+        n_cores=cores,
+        pool=pool,
+        desc=f"{prefix} fitting",
+    )
+
+    rows = [r for r in results if r is not None]
+    df_fit = pd.DataFrame(rows)
+
+    if df_fit.empty:
+        print(f"[{prefix}] No successful fits.")
+        return df_fit
+
+    # --------------------------------------------------
+    # 4) PER-GROUP BOOTSTRAP COLUMNS
+    # --------------------------------------------------
+    df_fit["bootstrap_nL"] = None
+    df_fit["bootstrap_rate"] = None
+    df_fit["bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        boot = row.get("BA_resampling_samples")
+        if boot is not None and len(boot) > 0:
+            df_fit.at[idx, "bootstrap_nL"]   = boot[:, 0].tolist()
+            df_fit.at[idx, "bootstrap_rate"] = boot[:, 1].tolist()
+            df_fit.at[idx, "bootstrap_Asyn"] = boot[:, 2].tolist()
+
+    # --------------------------------------------------
+    # 5) NULL / POOLED BOOTSTRAPS (SAFE)
+    # --------------------------------------------------
+    null_bootstrap_map = {}   # (ID, FORMULA) → ndarray (n_boot, 3)
+
+    pooled_keys = (
+        collapsed_all[[ID_COL, FORMULA_COL]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+
+    pooled_args = []
+    for uid, cf in pooled_keys:
+        sub = collapsed_all[
+            (collapsed_all[ID_COL] == uid) &
+            (collapsed_all[FORMULA_COL] == cf)
+        ]
+
+        pooled_args.append(
+            (
+                ID_COL,
+                GROUP_COL,
+                FORMULA_COL,
+                TIME_COL,
+                BOOT_SEED,
+                uid,
+                "null",   # label only
+                cf,
+                sub,
+                asymptote_mode,
+                user_Asyn_value,
+                n_boot,
+            )
+        )
+
+    if pooled_args:
+        print(f"[{prefix}] Fitting {len(pooled_args)} pooled/null analytes")
+
+        pooled_results = _parallel_fit(
+            _fit_abundance_one,
+            pooled_args,
+            n_cores=cores,
+            pool=pool,
+            desc=f"{prefix} pooled/null",
+        )
+
+        for out in pooled_results:
+            if out is None:
+                continue
+            boot = out.get("BA_resampling_samples")
+            if boot is not None and len(boot) > 0:
+                key = (out[ID_COL], out[FORMULA_COL])
+                null_bootstrap_map[key] = np.asarray(boot, float)
+
+    # --------------------------------------------------
+    # 6) ATTACH NULL BOOTSTRAPS (ROW-WISE — NO MERGE)
+    # --------------------------------------------------
+    df_fit["null_bootstrap_nL"] = None
+    df_fit["null_bootstrap_rate"] = None
+    df_fit["null_bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        key = (row[ID_COL], row[FORMULA_COL])
+        boot = null_bootstrap_map.get(key)
+
+        if boot is not None:
+            df_fit.at[idx, "null_bootstrap_nL"]   = boot[:, 0].tolist()
+            df_fit.at[idx, "null_bootstrap_rate"] = boot[:, 1].tolist()
+            df_fit.at[idx, "null_bootstrap_Asyn"] = boot[:, 2].tolist()
+
+    print(f"[{prefix}] Attached per-group and null bootstrap columns")
+
+    # --------------------------------------------------
+    # 7) (Optional) plotting hooks stay unchanged
+    # --------------------------------------------------
+    # ... your existing plotting code can follow here ...
+
+    return df_fit
+
+def perform_abundance_fit(
+    collapsed: pd.DataFrame,
+    collapsed_all: pd.DataFrame,
+    ID_COL: str,
+    asymptote_mode: str,
+    user_Asyn_value: Optional[float] = None,
+    n_boot: int = 1000,
+    tp_min: int = 3,
+    cores: int = 2,
+    save_dir: Optional[str] = None,
+    pool=None,
+    FORMULA_COL: str = None,
+    TP_MIN: Optional[int] = None,   # ← RESTORED
+    GROUP_COL: str = None,
+    TIME_COL: str = None,
+    BOOT_SEED: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    Parallel Binomial Abundance fit with SAFE null-bootstrap handling.
+    Backward compatible with legacy TP_MIN usage.
+    """
+
+    prefix = "BA"
+
+    # --------------------------------------------------
+    # 0) Resolve TP_MIN vs tp_min
+    # --------------------------------------------------
+    if TP_MIN is not None:
+        tp_min = TP_MIN
+
+    # --------------------------------------------------
+    # 1) Pre-filter rows
+    # --------------------------------------------------
+    if "Flag" in collapsed.columns:
+        before = len(collapsed)
+        collapsed = collapsed.loc[
+            collapsed["Flag"].astype(str).str.startswith("PASS")
+        ].copy()
+        print(f"[{prefix}] Skipping flagged rows → kept {len(collapsed)}/{before}")
+
+    keep_mask = (
+        collapsed["D_spectrum"].notna()
+        & (pd.to_numeric(collapsed.get("TP_count", 0), errors="coerce") >= tp_min)
+    )
+
+    before = len(collapsed)
+    collapsed = collapsed.loc[keep_mask].copy()
+    print(
+        f"[{prefix}] Filtered analytes → kept "
+        f"{len(collapsed)}/{before} "
+        f"(Flag=PASS, TP_count ≥ {tp_min})"
+    )
+
+    if collapsed.empty:
+        print(f"[{prefix}] No analytes passed filters — skipping.")
+        return pd.DataFrame()
+
+    # --------------------------------------------------
+    # 2) Output directories
+    # --------------------------------------------------
+    plot_dir = os.path.join(save_dir, f"{prefix}_fit_plots")
+    boot_dir = os.path.join(save_dir, f"{prefix}_resampling_plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    os.makedirs(boot_dir, exist_ok=True)
+
+    # --------------------------------------------------
+    # 3) Build per-group fit arguments
+    # --------------------------------------------------
+    grouped = list(
+        collapsed.groupby([ID_COL, GROUP_COL, FORMULA_COL], sort=False)
+    )
+
+    args_list = [
+        (
+            ID_COL,
+            GROUP_COL,
+            FORMULA_COL,
+            TIME_COL,
+            BOOT_SEED,
+            uid,
+            grp,
+            cf,
+            sub,
+            asymptote_mode,
+            user_Asyn_value,
+            n_boot,
+        )
+        for (uid, grp, cf), sub in grouped
+    ]
+
+    print(f"[{prefix}] Fitting {len(args_list)} group-level analytes")
+
+    results = _parallel_fit(
+        _fit_abundance_one,
+        args_list,
+        n_cores=cores,
+        pool=pool,
+        desc=f"{prefix} fitting",
+    )
+
+    rows = [r for r in results if r is not None]
+    df_fit = pd.DataFrame(rows)
+
+    if df_fit.empty:
+        print(f"[{prefix}] No successful fits.")
+        return df_fit
+
+    # --------------------------------------------------
+    # 4) PER-GROUP BOOTSTRAP COLUMNS
+    # --------------------------------------------------
+    df_fit["bootstrap_nL"] = None
+    df_fit["bootstrap_rate"] = None
+    df_fit["bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        boot = row.get("BA_resampling_samples")
+        if boot is not None and len(boot) > 0:
+            df_fit.at[idx, "bootstrap_nL"]   = boot[:, 0].tolist()
+            df_fit.at[idx, "bootstrap_rate"] = boot[:, 1].tolist()
+            df_fit.at[idx, "bootstrap_Asyn"] = boot[:, 2].tolist()
+
+    # --------------------------------------------------
+    # 5) NULL / POOLED BOOTSTRAPS (SAFE)
+    # --------------------------------------------------
+    null_bootstrap_map = {}   # (ID, FORMULA) → ndarray (n_boot, 3)
+
+    pooled_keys = (
+        collapsed_all[[ID_COL, FORMULA_COL]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+
+    pooled_args = []
+    for uid, cf in pooled_keys:
+        sub = collapsed_all[
+            (collapsed_all[ID_COL] == uid) &
+            (collapsed_all[FORMULA_COL] == cf)
+        ]
+
+        pooled_args.append(
+            (
+                ID_COL,
+                GROUP_COL,
+                FORMULA_COL,
+                TIME_COL,
+                BOOT_SEED,
+                uid,
+                "null",   # label only
+                cf,
+                sub,
+                asymptote_mode,
+                user_Asyn_value,
+                n_boot,
+            )
+        )
+
+    if pooled_args:
+        print(f"[{prefix}] Fitting {len(pooled_args)} pooled/null analytes")
+
+        pooled_results = _parallel_fit(
+            _fit_abundance_one,
+            pooled_args,
+            n_cores=cores,
+            pool=pool,
+            desc=f"{prefix} pooled/null",
+        )
+
+        for out in pooled_results:
+            if out is None:
+                continue
+            boot = out.get("BA_resampling_samples")
+            if boot is not None and len(boot) > 0:
+                key = (out[ID_COL], out[FORMULA_COL])
+                null_bootstrap_map[key] = np.asarray(boot, float)
+
+    # --------------------------------------------------
+    # 6) ATTACH NULL BOOTSTRAPS (ROW-WISE — NO MERGE)
+    # --------------------------------------------------
+    df_fit["null_bootstrap_nL"] = None
+    df_fit["null_bootstrap_rate"] = None
+    df_fit["null_bootstrap_Asyn"] = None
+
+    for idx, row in df_fit.iterrows():
+        key = (row[ID_COL], row[FORMULA_COL])
+        boot = null_bootstrap_map.get(key)
+
+        if boot is not None:
+            df_fit.at[idx, "null_bootstrap_nL"]   = boot[:, 0].tolist()
+            df_fit.at[idx, "null_bootstrap_rate"] = boot[:, 1].tolist()
+            df_fit.at[idx, "null_bootstrap_Asyn"] = boot[:, 2].tolist()
+
+    print(f"[{prefix}] Attached per-group and null bootstrap columns")
+
+    return df_fit
 
 
 from scipy.optimize import minimize
@@ -1720,98 +2374,6 @@ def _flag_rate_cap(
     return df
 
 
-
-
-
-
-
-def annotate_qc_flags(
-    df_fit: pd.DataFrame,
-    prefix: str,
-    minimum_standard_error: float,
-    maximum_standard_error: float,
-    asymptote_mode: str,
-    max_rate_cap: Optional[float],
-    min_rate_cap: Optional[float],
-) -> pd.DataFrame:
-    """
-    QC Summary:
-
-      SD QC ON ALL METRICS:
-          metrics = ["nL", "rate"] OR ["nL", "rate", "Asyn"]
-          FAIL if {prefix}_{m}_SD < minimum_standard_error
-          FAIL if {prefix}_{m}_SD > maximum_standard_error
-
-      RATE QC:
-          FAIL if {prefix}_rate > max_rate_cap
-          FAIL if {prefix}_rate < min_rate_cap
-    """
-
-    df = df_fit.copy()
-
-    if "Flag" not in df.columns:
-        df["Flag"] = "PASS"
-
-    def _flag_reason_local(mask: pd.Series, reason: str):
-        mask = mask.fillna(False)
-        if not mask.any():
-            return
-        cur = df.loc[mask, "Flag"].astype(str)
-        df.loc[mask, "Flag"] = np.where(
-            cur.str.startswith("PASS"),
-            "FAIL: " + reason,
-            cur + "; " + reason,
-        )
-
-    prefix = prefix.strip("_")
-
-    # ------------------------------------------------------------
-    # Determine metrics to QC
-    # ------------------------------------------------------------
-    if asymptote_mode == "fixed":
-        metrics = ["nL", "rate"]
-    else:
-        metrics = ["nL", "rate", "Asyn"]
-
-    # ------------------------------------------------------------
-    # QC: Standard Error bounds for ALL metrics
-    # ------------------------------------------------------------
-    for m in metrics:
-        sd_col = f"{prefix}_{m}_SD"
-
-        if sd_col not in df.columns:
-            _flag_reason_local(pd.Series(True, index=df.index),
-                               f"{prefix}: missing {sd_col}")
-            continue
-
-        sd_vals = pd.to_numeric(df[sd_col], errors="coerce")
-
-        _flag_reason_local(
-            sd_vals < minimum_standard_error,
-            f"{prefix}: {m}_SD < {minimum_standard_error}"
-        )
-
-        _flag_reason_local(
-            se_vals > maximum_standard_error,
-            f"{prefix}: {m}_SD > {maximum_standard_error}"
-        )
-
-    # ------------------------------------------------------------
-    # QC: rate caps
-    # ------------------------------------------------------------
-    rate_col = f"{prefix}_rate"
-    if rate_col in df.columns:
-        k_vals = pd.to_numeric(df[rate_col], errors="coerce")
-
-        if max_rate_cap is not None:
-            _flag_reason_local(k_vals > float(max_rate_cap),
-                               f"{prefix}: k>{max_rate_cap}")
-
-        if min_rate_cap is not None:
-            _flag_reason_local(k_vals < float(min_rate_cap),
-                               f"{prefix}: k<{min_rate_cap}")
-
-    return df
 
 
 
@@ -2378,6 +2940,47 @@ def main(dataframe, settings_path, molecule_type, out_path, graph_directory, pro
     )
     collapsed = _init_flag_column(collapsed)
     _debug_id_cols(collapsed, "After collapse")
+    
+    
+    # -----------------------
+    # Filter dfD ONLY for pooled/group-agnostic collapse:
+    # keep (ID, CF) pairs that appear in ALL groups
+    # -----------------------
+    all_groups = dfD[GROUP_COL].dropna().unique()
+    n_groups = len(all_groups)
+    
+    pairs_in_all_groups = (
+        dfD.groupby([ID_COL, FORMULA_COL])[GROUP_COL]
+           .nunique()
+           .pipe(lambda s: s[s == n_groups])
+           .index
+    )
+    
+    dfD_for_pooled = (
+        dfD.set_index([ID_COL, FORMULA_COL])
+           .loc[pairs_in_all_groups]
+           .reset_index()
+    )
+    
+    print(f"[Pooled-Filter] Keeping {len(pairs_in_all_groups)} (ID,CF) pairs present in all {n_groups} groups")
+    
+    # Now build pooled/group-agnostic collapse from the filtered dfD
+    collapsed_all = collapse_D_by_time(
+        dfD_for_pooled,
+        ID_COL=ID_COL,
+        GROUP_COL=GROUP_COL,
+        FORMULA_COL=FORMULA_COL,
+        TIME_COL=TIME_COL,
+        Z_COL=Z_COL,
+        tol=time_tol,
+        group_agnostic=True
+    )
+    
+        
+    
+    collapsed_all = _init_flag_column(collapsed_all)
+    _debug_id_cols(collapsed_all, "After group-agnostic collapse")
+
 
     # --------------------------
     # 6) Multiprocessing pool
@@ -2388,9 +2991,11 @@ def main(dataframe, settings_path, molecule_type, out_path, graph_directory, pro
     # 7) Setup fitters
     # --------------------------
     FITTERS = {
-        "BA": lambda coll: perform_abundance_fit(
-            coll,
-            ID_COL,
+         "BA": lambda coll: perform_abundance_fit(
+            collapsed=coll,
+            collapsed_all=collapsed_all,
+
+            ID_COL=ID_COL,
             asymptote_mode=asymptote_mode,
             user_Asyn_value=user_Asyn_value,
             n_boot=n_boot,
@@ -2404,6 +3009,7 @@ def main(dataframe, settings_path, molecule_type, out_path, graph_directory, pro
             TIME_COL=TIME_COL,
             BOOT_SEED=BOOT_SEED,
         )
+
 
     }
 
@@ -2507,6 +3113,12 @@ def main(dataframe, settings_path, molecule_type, out_path, graph_directory, pro
     plot_final_nL_panels(final_df, save_dir)
     print("\n[Main] Completed successfully.")
 
+
+    #add nH col
+
+    final_df["nH"] = final_df[FORMULA_COL].apply(
+        lambda cf: int(get_element_counts(str(cf))[1]) if pd.notna(cf) else np.nan
+    )
     return final_df
 
 
@@ -2518,7 +3130,7 @@ def run_binomial_pipeline(
     biomolecule_type,
     out_path,
     graphs_location,
-    processors,
+    processors
 ):
     print("\n" + "=" * 80)
     print("[Binomial] DEBUG: Incoming dataframe columns:")
@@ -2535,8 +3147,8 @@ def run_binomial_pipeline(
     dataframe  = downsample_unique_pairs(
             dataframe, id_col='Lipid Unique Identifier', formula_col='Adduct_cf', max_n=60
         )
-    """
 
+    """
 
     # -----------------------------------------------------
     # FIX: out_path is ALWAYS a file.

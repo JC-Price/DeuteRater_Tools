@@ -75,6 +75,30 @@ def close_window():
         pass
 
 
+
+# Progress bar globals
+_PROGRESS_BAR = None
+_PROGRESS_LABEL = None
+
+def update_progress(current: int, total: int, message: str = ""):
+    """Update progress bar from main.py"""
+    global _PROGRESS_BAR, _PROGRESS_LABEL, _ROOT
+    if _ROOT and _PROGRESS_BAR and _PROGRESS_LABEL:
+        try:
+            percentage = (current / total * 100) if total > 0 else 0
+            _PROGRESS_BAR['value'] = percentage
+            # ✅ Truncate long messages to fit a fixed width
+            if len(message) > 45:
+                display_msg = message[:42] + "..."
+            else:
+                display_msg = message
+            _PROGRESS_LABEL.config(text=f"{display_msg} ({current}/{total})")
+            _ROOT.update_idletasks()
+        except:
+            pass
+
+
+
 # ----------------------- Utility: enable/disable with greying -----------------------
 def _set_enabled(widget: tk.Widget, enabled: bool, disabled_label_style: str, enabled_label_style: str):
     """Recursively toggle child widgets' interactive state and label color."""
@@ -896,9 +920,9 @@ def _build_settings_tab(parent, state_registry) -> ttk.Frame:
 
 
 # ----------------------- App entry -----------------------
+
 def launch_gui():
     global _ROOT, _ON_ANALYZE
-
     if USE_TTKBOOTSTRAP:
         root = tb.Window(themename="flatly")
         root.title("Lipidomics Plots")
@@ -927,7 +951,7 @@ def launch_gui():
             from tkinter import messagebox
             messagebox.showerror("Error", f"Failed to read GUI state: {e}")
             return
-    
+
         if not _ON_ANALYZE:
             from tkinter import messagebox
             messagebox.showinfo(
@@ -935,10 +959,10 @@ def launch_gui():
                 "No analyze callback has been registered."
             )
             return
-    
+
         import threading
         from tkinter import messagebox
-    
+
         def worker():
             try:
                 _ON_ANALYZE(cfg)
@@ -959,9 +983,19 @@ def launch_gui():
             daemon=True
         ).start()
 
-
     analyze_btn = ttk.Button(toolbar, text="Analyze", command=_on_analyze_clicked)
     analyze_btn.pack(side="right", padx=4)
+
+    # ------------------------------
+    # Progress bar section (NEW)
+    # ------------------------------
+    progress_frame = ttk.Frame(root)
+    progress_frame.pack(fill="x", side="top", padx=10, pady=5)
+    global _PROGRESS_LABEL, _PROGRESS_BAR
+    _PROGRESS_LABEL = ttk.Label(progress_frame, text="Ready", width=60)  # ← Added width=60
+    _PROGRESS_LABEL.pack(side="left", padx=(0, 10))
+    _PROGRESS_BAR = ttk.Progressbar(progress_frame, mode='determinate', length=500)
+    _PROGRESS_BAR.pack(side="left")  # ← No fill/expand
 
     # Notebook (tabs)
     nb = ttk.Notebook(root)
@@ -971,22 +1005,23 @@ def launch_gui():
     homeostasis_tab = _build_tab_with_enable(
         nb, "Homeostasis", "homeostasis", "Disabled.TLabel", "Enabled.TLabel", state_registry
     )
-    volcano_tab     = _build_tab_with_enable(
-        nb, "Volcano",     "volcano",     "Disabled.TLabel", "Enabled.TLabel", state_registry
+    volcano_tab = _build_tab_with_enable(
+        nb, "Volcano", "volcano", "Disabled.TLabel", "Enabled.TLabel", state_registry
     )
-    conformity_tab  = _build_tab_with_enable(
-        nb, "Conformity",  "conformity",  "Disabled.TLabel", "Enabled.TLabel", state_registry
+    conformity_tab = _build_tab_with_enable(
+        nb, "Conformity", "conformity", "Disabled.TLabel", "Enabled.TLabel", state_registry
     )
-    settings_tab    = _build_settings_tab(nb, state_registry)
+    settings_tab = _build_settings_tab(nb, state_registry)
     state_registry["_settings_tab"] = settings_tab
 
     nb.add(homeostasis_tab, text="Homeostasis")
-    nb.add(volcano_tab,     text="Volcano")
-    nb.add(conformity_tab,  text="Conformity")
-    nb.add(settings_tab,    text="Settings")
+    nb.add(volcano_tab, text="Volcano")
+    nb.add(conformity_tab, text="Conformity")
+    nb.add(settings_tab, text="Settings")
     nb.select(0)
 
     root.mainloop()
+
 
 
 

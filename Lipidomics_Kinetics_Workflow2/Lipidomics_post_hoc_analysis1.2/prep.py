@@ -107,7 +107,7 @@ def _apply_transform_list(df, cols, slope, intercept, suffix="_corrected_to_ctl"
 
 
 
-def standards_mean_ratio_factor(df, num_med, den_med, standards_col="Standards", tiny=1e-9):
+def standards_median_ratio_factor(df, num_med, den_med, standards_col="Standards", tiny=1e-9):
     std_mask = (
         df[standards_col].astype(str).str.strip().str.lower()
         .isin(["true", "t", "1", "yes", "y"])
@@ -119,6 +119,22 @@ def standards_mean_ratio_factor(df, num_med, den_med, standards_col="Standards",
     log2_ratio = np.log2(df.loc[m, num_med] + tiny) - np.log2(df.loc[m, den_med] + tiny)
     factor = 2 ** np.nanmean(log2_ratio)
     return float(factor)
+
+
+def standards_median_ratio_factor(df, num_med, den_med, standards_col="Standards", tiny=1e-9):
+    std_mask = (
+        df[standards_col].astype(str).str.strip().str.lower()
+        .isin(["true", "t", "1", "yes", "y"])
+    )
+    m = std_mask & (df[num_med] > 0) & (df[den_med] > 0)
+    if m.sum() < 3:
+        raise ValueError("Not enough standards to compute scaling factor.")
+
+    ratio = (df.loc[m, num_med].astype(float) + tiny) / (df.loc[m, den_med].astype(float) + tiny)
+    factor = np.nanmedian(ratio)
+    return float(factor)
+
+
 
 def apply_global_scale(df, cols_to_scale, factor):
     for c in cols_to_scale:
@@ -670,6 +686,491 @@ def _dr_abn_rep_cols(df: pd.DataFrame, ident: str) -> list[str]:
 
 
 
+import numpy as np
+import pandas as pd
+from typing import Optional, Dict, Iterable
+
+# ---------------------------
+# Robust parsers & utilities
+# ---------------------------
+def _to_array(cell) -> np.ndarray:
+    """Parse list/ndarray/CSV-string into a float numpy array (NaNs dropped)."""
+    if cell is None:
+        return np.array([], float)
+    if isinstance(cell, np.ndarray):
+        x = cell.astype(float, copy=False)
+    elif isinstance(cell, (list, tuple)):
+        x = np.asarray(cell, float)
+    else:
+        # string-like with commas or spaces
+        s = str(cell).strip().strip("[]")
+        if not s:
+            return np.array([], float)
+        parts = [p for p in s.replace("\n", " ").split(",") if p.strip()]
+        if len(parts) == 1:  # maybe space-delimited
+            parts = s.split()
+        try:
+            x = np.asarray([float(p) for p in parts], float)
+        except Exception:
+            x = np.array([], float)
+    x = x[np.isfinite(x)]
+    return x
+
+def _center(x: np.ndarray, how: str = "median") -> float:
+    if x.size == 0:
+        return np.nan
+    return float(np.nanmedian(x) if how == "median" else np.nanmean(x))
+
+def _sd(x: np.ndarray) -> float:
+    if x.size <= 1:
+        return np.nan
+    return float(np.nanstd(x, ddof=1))
+
+# -------------------------------------------
+# Core MacKinnon-style p-value from bootstraps
+# -------------------------------------------
+def mackinnon_p_from_boot(
+    boot_exp: np.ndarray,
+    boot_ctl: np.ndarray,
+    boot_null: np.ndarray,
+    *,
+    center: str = "median",
+    B: Optional[int] = None,
+    B2: Optional[int] = None,
+    seed: Optional[int] = 0,
+    denom_mode: str = "observed",  # "observed" or "null"
+) -> Dict[str, float]:
+    """
+    MacKinnon-style bootstrap test using existing bootstrap draws.
+
+    Parameters
+    ----------
+    boot_exp, boot_ctl : ndarray
+        Bootstrap draws of the parameter from Experiment and Control fits.
+        (These are your 'bootstrap_{param}_{experiment}' and 'bootstrap_{param}_{control}'.)
+    boot_null : ndarray
+        Bootstrap draws from the pooled/combined "null" fit ('null_bootstrap_{param}').
+    center : {"median","mean"}
+        Center estimator for point estimate (defaults to median; robust).
+    B : int or None
+        Number of null-reference draws. Default uses min(max(999,len(boot_null)), 4999).
+    B2 : int or None
+        Double bootstrap inner replications per first-level draw (e.g., 199). None disables.
+    seed : int or None
+        RNG seed for reproducibility.
+    denom_mode : {"observed","null"}
+        - "observed": denom = sqrt(Var_exp + Var_ctl) estimated from boot_exp/boot_ctl.
+        - "null":     denom = sqrt(2) * sd(boot_null). Use if you want symmetric null variance.
+
+    Returns
+    -------
+    dict with keys:
+      t_obs, p_boot, p_double, theta_E, theta_C, diff_mean,
+      diff_ci_lo, diff_ci_hi, fc, log2_fc
+    """
+    rng = np.random.default_rng(seed)
+
+    # Sanity + finite cleaning
+    xe = np.asarray(boot_exp, float); xe = xe[np.isfinite(xe)]
+    xc = np.asarray(boot_ctl, float); xc = xc[np.isfinite(xc)]
+    xn = np.asarray(boot_null, float); xn = xn[np.isfinite(xn)]
+
+    if xe.size < 2 or xc.size < 2 or xn.size < 2:
+        return dict(
+            t_obs=np.nan, p_boot=np.nan, p_double=np.nan,
+            theta_E=np.nan, theta_C=np.nan, diff_mean=np.nan,
+            diff_ci_lo=np.nan, diff_ci_hi=np.nan,
+            fc=np.nan, log2_fc=np.nan
+        )
+
+    theta_E = _center(xe, center)
+    theta_C = _center(xc, center)
+    se_E = _sd(xe)
+    se_C = _sd(xc)
+    if denom_mode == "null":
+        se = np.sqrt(2.0) * _sd(xn)
+    else:
+        se = np.sqrt(se_E**2 + se_C**2)
+
+    if not np.isfinite(se) or se <= 0:
+        return dict(
+            t_obs=np.nan, p_boot=np.nan, p_double=np.nan,
+            theta_E=theta_E, theta_C=theta_C,
+            diff_mean=(theta_E - theta_C),
+            diff_ci_lo=np.nan, diff_ci_hi=np.nan,
+            fc=(theta_E / theta_C if theta_C != 0 and np.isfinite(theta_C) else np.nan),
+            log2_fc=(np.log2(theta_E/theta_C) if theta_C not in (0, np.nan) and np.isfinite(theta_E/theta_C) else np.nan)
+        )
+
+    t_obs = (theta_E - theta_C) / se
+
+    # Reference T* under null: draw two independent null thetas each time
+    if B is None:
+        B = int(min(max(999, xn.size), 4999))
+    idx1 = rng.integers(0, xn.size, size=B)
+    idx2 = rng.integers(0, xn.size, size=B)
+    theta1 = xn[idx1]; theta2 = xn[idx2]
+
+    if denom_mode == "null":
+        se_ref = se * np.ones(B, float)  # constant denom
+    else:
+        # Keep observed denom; this preserves asymmetric group variance (recommended)
+        se_ref = se * np.ones(B, float)
+
+    t_ref = (theta1 - theta2) / se_ref
+    t_ref = t_ref[np.isfinite(t_ref)]
+    if t_ref.size == 0:
+        p_boot = np.nan
+    else:
+        # Two-sided p with add-one smoothing
+        B_eff = t_ref.size
+        p_hi = (np.sum(t_ref >= t_obs) + 1) / (B_eff + 1)
+        p_lo = (np.sum(t_ref <= t_obs) + 1) / (B_eff + 1)
+        p_boot = float(min(1.0, 2 * min(p_hi, p_lo)))
+
+    # Optional double bootstrap (MacKinnon) — refine single-bootstrap p-value
+    p_double = np.nan
+    if (B2 is not None) and (B2 > 0) and (t_ref.size > 0):
+        # For each first-level draw tb = t_ref[b], build its own inner null (again from xn).
+        # Compute the fraction of inner p-values <= p_boot.
+        inner_ps = []
+        for _tb in t_ref[: min(200, t_ref.size)]:  # cap for speed
+            ii1 = rng.integers(0, xn.size, size=B2)
+            ii2 = rng.integers(0, xn.size, size=B2)
+            th1 = xn[ii1]; th2 = xn[ii2]
+            t2 = (th1 - th2) / se  # same denom choice as above
+            t2 = t2[np.isfinite(t2)]
+            if t2.size == 0:
+                continue
+            B2_eff = t2.size
+            p2_hi = (np.sum(t2 >= _tb) + 1) / (B2_eff + 1)
+            p2_lo = (np.sum(t2 <= _tb) + 1) / (B2_eff + 1)
+            inner_ps.append(min(1.0, 2 * min(p2_hi, p2_lo)))
+        if inner_ps:
+            inner_ps = np.asarray(inner_ps, float)
+            p_double = float((np.sum(inner_ps <= p_boot) + 1) / (inner_ps.size + 1))
+
+    # Percentile CI for the difference using cross-draws from exp & ctl bootstraps
+    # (ancillary; MacKinnon focuses on p-values)
+    Bdiff = int(min(4999, max(xe.size, xc.size)))
+    di = xe[np.random.default_rng(seed).integers(0, xe.size, size=Bdiff)] \
+         - xc[np.random.default_rng(seed).integers(0, xc.size, size=Bdiff)]
+    di = di[np.isfinite(di)]
+    if di.size:
+        lo, hi = np.percentile(di, [2.5, 97.5])
+    else:
+        lo = hi = np.nan
+
+    fc = theta_E / theta_C if (theta_C not in (0, np.nan) and np.isfinite(theta_E) and np.isfinite(theta_C)) else np.nan
+    l2 = (np.log2(fc) if (fc not in (0, np.nan) and np.isfinite(fc)) else np.nan)
+
+    return dict(
+        t_obs=float(t_obs),
+        p_boot=float(p_boot) if np.isfinite(p_boot) else np.nan,
+        p_double=float(p_double) if np.isfinite(p_double) else np.nan,
+        theta_E=float(theta_E), theta_C=float(theta_C),
+        diff_mean=float(theta_E - theta_C),
+        diff_ci_lo=float(lo), diff_ci_hi=float(hi),
+        fc=float(fc) if np.isfinite(fc) else np.nan,
+        log2_fc=float(l2) if np.isfinite(l2) else np.nan
+    )
+
+# ------------------------------------------------------------
+# DataFrame-level runner for nL / rate / Asyn using your cols
+# ------------------------------------------------------------
+
+
+
+def run_mackinnon_tests_from_df(
+    df: pd.DataFrame,
+    experiment: str,
+    control: str,
+    params: Iterable[str] = ("nL",),
+    *,
+    center: str = "median",
+    B: Optional[int] = None,
+    B2: Optional[int] = None,
+    seed: int = 0,
+    denom_mode: str = "observed",
+    print_every: int = 250,
+    verbose: bool = False
+) -> pd.DataFrame:
+    """
+    Apply MacKinnon-style tests per row for selected parameters using
+    bootstrap columns:
+        bootstrap_{param}_{experiment},
+        bootstrap_{param}_{control},
+        null_bootstrap_{param}
+
+    For nL, results are written DIRECTLY using legacy column names:
+        n_val_p_value
+        -log10n_val_p
+        n_val_FC
+        log2_n_val_FC
+        n_val_diff_mean
+        n_val_diff_CI95_lo
+        n_val_diff_CI95_hi
+        n_val_t_obs
+    """
+    import time
+    out = df.copy()
+    rng_base = np.random.default_rng(seed)
+
+    n_rows = len(out)
+    print(f"[run_mackinnon] Starting MacKinnon nL test on {n_rows} rows")
+
+    start_all = time.time()
+
+    for param in params:
+        if param.lower() != "nl":
+            continue  # this function is explicitly nL-only for legacy compatibility
+
+        col_exp = f"bootstrap_{param}_{experiment}"
+        col_ctl = f"bootstrap_{param}_{control}"
+        col_null = f"null_bootstrap_{param}"
+
+        print(f"\n[run_mackinnon:nL] Columns:")
+        print(f"  EXP : {col_exp}")
+        print(f"  CTL : {col_ctl}")
+        print(f"  NULL: {col_null}")
+
+        legacy_cols = [
+            "n_val_p_value",
+            "-log10n_val_p",
+            "n_val_FC",
+            "log2_n_val_FC",
+            "n_val_diff_mean",
+            "n_val_diff_CI95_lo",
+            "n_val_diff_CI95_hi",
+            "n_val_t_obs",
+        ]
+        for c in legacy_cols:
+            if c not in out.columns:
+                out[c] = np.nan
+
+        tested = 0
+        skipped = 0
+        t0 = time.time()
+
+        for i in range(n_rows):
+            if print_every and i % print_every == 0:
+                if i == 0:
+                    print(f"[run_mackinnon:nL] 0/{n_rows} …")
+                else:
+                    elapsed = time.time() - t0
+                    print(f"[run_mackinnon:nL] {i}/{n_rows} "
+                          f"({i/n_rows:.0%}) elapsed={elapsed:.1f}s")
+
+            xe = _to_array(out.at[i, col_exp]) if col_exp in out.columns else np.array([], float)
+            xc = _to_array(out.at[i, col_ctl]) if col_ctl in out.columns else np.array([], float)
+            xn = _to_array(out.at[i, col_null]) if col_null in out.columns else np.array([], float)
+
+            if xe.size >= 2 and xc.size >= 2 and xn.size >= 2:
+                res = mackinnon_p_from_boot(
+                    xe, xc, xn,
+                    center=center,
+                    B=B,
+                    B2=B2,
+                    seed=int(rng_base.integers(0, 2**31 - 1)),
+                    denom_mode=denom_mode,
+                )
+
+                # ✅ WRITE LEGACY COLUMNS DIRECTLY
+                out.at[i, "n_val_p_value"] = res["p_boot"]
+                out.at[i, "-log10n_val_p"] = (
+                    -np.log10(res["p_boot"]) if res["p_boot"] > 0 else np.nan
+                )
+                out.at[i, "n_val_FC"] = res["fc"]
+                out.at[i, "log2_n_val_FC"] = (
+                    np.log2(res["fc"]) if res["fc"] > 0 else np.nan
+                )
+                out.at[i, "n_val_diff_mean"] = res["diff_mean"]
+                out.at[i, "n_val_diff_CI95_lo"] = res["diff_ci_lo"]
+                out.at[i, "n_val_diff_CI95_hi"] = res["diff_ci_hi"]
+                out.at[i, "n_val_t_obs"] = res["t_obs"]
+
+                tested += 1
+            else:
+                skipped += 1
+                if verbose:
+                    reasons = []
+                    if xe.size < 2: reasons.append(f"EXP n={xe.size}")
+                    if xc.size < 2: reasons.append(f"CTL n={xc.size}")
+                    if xn.size < 2: reasons.append(f"NULL n={xn.size}")
+                    print(f"[run_mackinnon:nL] skip row {i} — {', '.join(reasons)}")
+
+        elapsed = time.time() - t0
+        print(f"[run_mackinnon:nL] complete — tested={tested}, skipped={skipped}, "
+              f"elapsed={elapsed:.1f}s")
+
+    total_elapsed = time.time() - start_all
+    print(f"[run_mackinnon] Finished in {total_elapsed:.1f}s")
+
+    return out
+
+
+
+def run_mackinnon_tests_from_df(
+    df: pd.DataFrame,
+    experiment: str,
+    control: str,
+    params: Iterable[str] = ("nL",),
+    *,
+    center: str = "median",
+    B: Optional[int] = None,
+    B2: Optional[int] = None,
+    seed: int = 0,
+    denom_mode: str = "observed",
+    print_every: int = 250,
+    verbose: bool = False
+) -> pd.DataFrame:
+    """
+    Apply MacKinnon-style tests per row for selected parameters using
+    bootstrap columns:
+        bootstrap_{param}_{experiment},
+        bootstrap_{param}_{control},
+        null_bootstrap_{param}
+
+    For nL, results are written DIRECTLY using legacy column names:
+        n_val_p_value
+        -log10n_val_p
+        n_val_FC
+        log2_n_val_FC
+        n_val_diff_mean
+        n_val_diff_CI95_lo
+        n_val_diff_CI95_hi
+        n_val_t_obs
+
+    NEW (for nL volcano & QC):
+        n_val_fraction_difference      # (theta_E - theta_C) / theta_C
+        n_val_center_Experiment        # theta_E
+        n_val_center_Control           # theta_C
+    """
+    import time
+    out = df.copy()
+    rng_base = np.random.default_rng(seed)
+
+    n_rows = len(out)
+    print(f"[run_mackinnon] Starting MacKinnon nL test on {n_rows} rows")
+
+    start_all = time.time()
+
+    for param in params:
+        if param.lower() != "nl":
+            # this function is explicitly nL-only for legacy compatibility
+            continue
+
+        col_exp = f"bootstrap_{param}_{experiment}"
+        col_ctl = f"bootstrap_{param}_{control}"
+        col_null = f"null_bootstrap_{param}"
+
+        print(f"\n[run_mackinnon:nL] Columns:")
+        print(f"  EXP : {col_exp}")
+        print(f"  CTL : {col_ctl}")
+        print(f"  NULL: {col_null}")
+
+        # ---- create legacy output columns upfront (NaN) ----
+        legacy_cols = [
+            "n_val_p_value",
+            "-log10n_val_p",
+            "n_val_FC",
+            "log2_n_val_FC",
+            "n_val_diff_mean",
+            "n_val_diff_CI95_lo",
+            "n_val_diff_CI95_hi",
+            "n_val_t_obs",
+        ]
+        for c in legacy_cols:
+            if c not in out.columns:
+                out[c] = np.nan
+
+        # ---- NEW: columns used by the nL volcano (and helpful QC) ----
+        new_cols = [
+            "n_val_fraction_difference",
+            "n_val_center_Experiment",
+            "n_val_center_Control",
+        ]
+        for c in new_cols:
+            if c not in out.columns:
+                out[c] = np.nan
+
+        tested = 0
+        skipped = 0
+        t0 = time.time()
+
+        for i in range(n_rows):
+            if print_every and i % print_every == 0:
+                if i == 0:
+                    print(f"[run_mackinnon:nL] 0/{n_rows} …")
+                else:
+                    elapsed = time.time() - t0
+                    print(
+                        f"[run_mackinnon:nL] {i}/{n_rows} "
+                        f"({i/n_rows:.0%}) elapsed={elapsed:.1f}s"
+                    )
+
+            xe = _to_array(out.at[i, col_exp]) if col_exp in out.columns else np.array([], float)
+            xc = _to_array(out.at[i, col_ctl]) if col_ctl in out.columns else np.array([], float)
+            xn = _to_array(out.at[i, col_null]) if col_null in out.columns else np.array([], float)
+
+            if xe.size >= 2 and xc.size >= 2 and xn.size >= 2:
+                res = mackinnon_p_from_boot(
+                    xe, xc, xn,
+                    center=center,
+                    B=B,
+                    B2=B2,
+                    seed=int(rng_base.integers(0, 2**31 - 1)),
+                    denom_mode=denom_mode,
+                )
+
+                # ✅ WRITE LEGACY COLUMNS DIRECTLY
+                out.at[i, "n_val_p_value"] = res["p_boot"]
+                out.at[i, "-log10n_val_p"] = (
+                    -np.log10(res["p_boot"]) if res["p_boot"] > 0 else np.nan
+                )
+                out.at[i, "n_val_FC"] = res["fc"]
+                out.at[i, "log2_n_val_FC"] = (
+                    np.log2(res["fc"]) if res["fc"] > 0 else np.nan
+                )
+                out.at[i, "n_val_diff_mean"] = res["diff_mean"]
+                out.at[i, "n_val_diff_CI95_lo"] = res["diff_ci_lo"]
+                out.at[i, "n_val_diff_CI95_hi"] = res["diff_ci_hi"]
+                out.at[i, "n_val_t_obs"] = res["t_obs"]
+
+                # --- NEW: store centers and fraction difference for volcano X-axis ---
+                theta_E = res.get("theta_E", np.nan)
+                theta_C = res.get("theta_C", np.nan)
+
+                out.at[i, "n_val_center_Experiment"] = theta_E
+                out.at[i, "n_val_center_Control"] = theta_C
+
+                if np.isfinite(theta_E) and np.isfinite(theta_C) and theta_C != 0:
+                    out.at[i, "n_val_fraction_difference"] = (theta_E - theta_C) / theta_C
+                else:
+                    out.at[i, "n_val_fraction_difference"] = np.nan
+
+                tested += 1
+            else:
+                skipped += 1
+                if verbose:
+                    reasons = []
+                    if xe.size < 2: reasons.append(f"EXP n={xe.size}")
+                    if xc.size < 2: reasons.append(f"CTL n={xc.size}")
+                    if xn.size < 2: reasons.append(f"NULL n={xn.size}")
+                    print(f"[run_mackinnon:nL] skip row {i} — {', '.join(reasons)}")
+
+        elapsed = time.time() - t0
+        print(
+            f"[run_mackinnon:nL] complete — tested={tested}, "
+            f"skipped={skipped}, elapsed={elapsed:.1f}s"
+        )
+
+    total_elapsed = time.time() - start_all
+    print(f"[run_mackinnon] Finished in {total_elapsed:.1f}s")
+
+    return out
+
+
 
 
 # ============================================================================
@@ -773,13 +1274,18 @@ class Experiment:
             exp, ctl = self.experimental_identifier, self.control_identifier
 
 
+            
             # ============================================================
             # SIMPLE ABUNDANCE ANALYSIS
             # (independent mTIC + standards normalization)
             # ============================================================
             
+
             combined = combined.copy()
-            use_baseline = self.baseline is not None
+            
+            # baseline is optional unless standards normalization is enabled
+            use_baseline = self.baseline is not None and str(self.baseline).strip() != ""
+            baseline_required = bool(self.normalize_by_standards)
             
             # ------------------------------------------------------------
             # 1. Identify raw abundance columns (*_Abn)
@@ -794,12 +1300,25 @@ class Experiment:
             if not exp_cols or not ctl_cols:
                 raise ValueError("Could not identify experiment/control abundance columns.")
             
+            # --- baseline columns are ONLY required for standards normalization ---
+            base_cols = []  # always define to avoid UnboundLocal issues later
             if use_baseline:
-                base = self.baseline
+                base = str(self.baseline).strip()
                 base_cols = [c for c in abn_cols if c.startswith(base)]
-                if not base_cols:
-                    raise ValueError("Baseline specified but no baseline abundance columns found.")
             
+                if not base_cols:
+                    if baseline_required:
+                        raise ValueError(
+                            "Baseline specified/required for standards normalization, "
+                            "but no baseline abundance (_Abn) columns found."
+                        )
+                    else:
+                        warnings.warn(
+                            f"Baseline='{base}' was set, but no baseline _Abn columns were found. "
+                            "Baseline will be ignored because standards normalization is off."
+                        )
+                        use_baseline = False  # IMPORTANT: disables downstream baseline usage
+
             # ------------------------------------------------------------
             # 2. Optional mTIC normalization (creates *_norm columns)
             # ------------------------------------------------------------
@@ -848,7 +1367,7 @@ class Experiment:
             # 3. Guard: ensure valid columns
             # ------------------------------------------------------------
             if not exp_cols_used or not ctl_cols_used:
-                raise RuntimeError("[prep] No abundance columns available for mean computation.")
+                raise RuntimeError("[prep] No abundance columns available for median computation.")
             
             if use_baseline and not base_cols_used:
                 raise RuntimeError("[prep] Baseline requested but no baseline columns available.")
@@ -857,8 +1376,20 @@ class Experiment:
             
 
             # ------------------------------------------------------------
-            # 4. Compute means (always exactly once)
+            # 4. Compute medians (always exactly once)
             # ------------------------------------------------------------
+            exp_median = f"{exp}_abundance_median"
+            ctl_median = f"{ctl}_abundance_median"
+            
+            combined[exp_median] = combined[exp_cols_used].median(axis=1, skipna=True)
+            combined[ctl_median] = combined[ctl_cols_used].median(axis=1, skipna=True)
+            
+            if use_baseline:
+                baseline_median = f"{self.baseline}_abundance_median"
+                combined[baseline_median] = combined[base_cols_used].median(axis=1, skipna=True)
+
+
+
             exp_mean = f"{exp}_abundance_mean"
             ctl_mean = f"{ctl}_abundance_mean"
             
@@ -868,7 +1399,6 @@ class Experiment:
             if use_baseline:
                 baseline_mean = f"{self.baseline}_abundance_mean"
                 combined[baseline_mean] = combined[base_cols_used].mean(axis=1, skipna=True)
-
             
             # ------------------------------------------------------------
             # 5. Optional standards-based global scaling
@@ -881,25 +1411,32 @@ class Experiment:
                     )
             
                 # EXP → BASE
-                factor_exp = standards_mean_ratio_factor(
+                factor_exp = standards_median_ratio_factor(
                     combined,
-                    num_med=exp_mean,
-                    den_med=baseline_mean,
+                    num_med=exp_median,
+                    den_med=baseline_median,
                 )
                 combined = apply_global_scale(combined, exp_cols_used, factor_exp)
             
                 # CTL → BASE
-                factor_ctl = standards_mean_ratio_factor(
+                factor_ctl = standards_median_ratio_factor(
                     combined,
-                    num_med=ctl_mean,
-                    den_med=baseline_mean,
+                    num_med=ctl_median,
+                    den_med=baseline_median,
                 )
                 combined = apply_global_scale(combined, ctl_cols_used, factor_ctl)
             
-                # Recompute means on SAME columns
+
+                # Recompute medians on SAME columns (already present)
+                combined[exp_median] = combined[exp_cols_used].median(axis=1, skipna=True)
+                combined[ctl_median] = combined[ctl_cols_used].median(axis=1, skipna=True)
+                combined[baseline_median] = combined[base_cols_used].median(axis=1, skipna=True)
+                
+                #  Recompute MEANS as well (needed for mean-based FCs)
                 combined[exp_mean] = combined[exp_cols_used].mean(axis=1, skipna=True)
                 combined[ctl_mean] = combined[ctl_cols_used].mean(axis=1, skipna=True)
                 combined[baseline_mean] = combined[base_cols_used].mean(axis=1, skipna=True)
+
             
                 print(
                     "[prep] Standards normalization applied: "
@@ -917,10 +1454,12 @@ class Experiment:
                 exp_vals = pd.to_numeric(row[exp_cols_used], errors="coerce").dropna().values
                 ctl_vals = pd.to_numeric(row[ctl_cols_used], errors="coerce").dropna().values
             
+
                 if len(exp_vals) >= 2 and len(ctl_vals) >= 2:
                     _, p = ttest_ind(exp_vals, ctl_vals, equal_var=False)
                 else:
                     p = np.nan
+
             
                 pvals.append(p)
             
@@ -938,14 +1477,22 @@ class Experiment:
                     method="fdr_bh"
                 )[1]
             
+
             # ------------------------------------------------------------
-            # 6. Fold-change & volcano metrics
+            # 6. Fold-change & volcano metrics (MEANS ONLY)
             # ------------------------------------------------------------
             tiny = np.finfo(float).tiny
             
-            combined["FC_abn"] = combined[exp_mean] / combined[ctl_mean]
-            combined["log2_abn_FC"] = np.log2(combined["FC_abn"])
+            # Canonical abundance fold-change: mean(EXP) / mean(CTL)
+            combined["FC_abn"] = (
+                combined[exp_mean] / combined[ctl_mean].replace(0, tiny)
+            )
             
+            combined["log2_abn_FC"] = np.log2(
+                combined["FC_abn"].replace(0, tiny)
+            )
+            
+            # P-value display metrics (from existing abundance tests)
             combined["-log10abn_P"] = -np.log10(
                 pd.to_numeric(combined["abn_p_value"], errors="coerce").replace(0, tiny)
             )
@@ -953,7 +1500,7 @@ class Experiment:
             combined["-log10abnBH"] = -np.log10(
                 pd.to_numeric(combined["abn_p_adj_BH"], errors="coerce").replace(0, tiny)
             )
-            
+
     
 
             # ==================================================================
@@ -975,16 +1522,16 @@ class Experiment:
                 print(f"[standards] rows flagged Standards==True: {int(Standards_bool.sum())}")
             
                 if not std_df.empty:
-                    # Use means already computed (raw or normalized)
-                    if exp_mean not in std_df.columns or ctl_mean not in std_df.columns:
-                        raise ValueError("Abundance means not found for Standards diagnostic.")
+                    # Use medians already computed (raw or normalized)
+                    if exp_median not in std_df.columns or ctl_median not in std_df.columns:
+                        raise ValueError("Abundance medians not found for Standards diagnostic.")
             
                     std_df = std_df.replace([np.inf, -np.inf], np.nan).dropna(
-                        subset=[exp_mean, ctl_mean]
+                        subset=[exp_median, ctl_median]
                     )
             
                     if not std_df.empty:
-                        log2fc = np.log2(std_df[exp_mean] / std_df[ctl_mean])
+                        log2fc = np.log2(std_df[exp_median] / std_df[ctl_median])
             
                         plt.figure(figsize=(6, 4))
                         plt.hist(log2fc, bins=30, alpha=0.7, edgecolor="black")
@@ -1035,6 +1582,7 @@ class Experiment:
             # ==================================================================
             self.df = combined
 
+
    
 
             # ------------------------------------------------------------------
@@ -1042,8 +1590,8 @@ class Experiment:
             # ------------------------------------------------------------------
             ke = pd.to_numeric(combined.get(f'Abundance rate_{exp}'), errors='coerce')
             kc = pd.to_numeric(combined.get(f'Abundance rate_{ctl}'), errors='coerce')
-            seE = pd.to_numeric(combined.get(f'Abundance SE_{exp}'), errors='coerce')
-            seC = pd.to_numeric(combined.get(f'Abundance SE_{ctl}'), errors='coerce')
+            seE = pd.to_numeric(combined.get(f'Abundance SE_K_{exp}'), errors='coerce')
+            seC = pd.to_numeric(combined.get(f'Abundance SE_K_{ctl}'), errors='coerce')
             dofE = pd.to_numeric(combined.get(f'Abundance dof_{exp}'), errors='coerce')
             dofC = pd.to_numeric(combined.get(f'Abundance dof_{ctl}'), errors='coerce')
             
@@ -1077,41 +1625,26 @@ class Experiment:
             # ------------------------------------------------------------------
             # n-value metrics (replicate-aware Welch's t-test)
             # ------------------------------------------------------------------
-            for ident in (exp, ctl):
-                            col = f"All_n_values_{ident}"
-                            if col in combined.columns:
-                                combined[col] = combined[col].apply(parse_series_any)
-            
-            p_vals, fc_vals, frac_diffs = [], [], []
-            for _, row in combined.iterrows():
-                nE = row.get(f"All_n_values_{exp}")
-                #print(f'{nE}')
-                nC = row.get(f"All_n_values_{ctl}")
-                # ensure arrays, not strings
-                if isinstance(nE, np.ndarray) and isinstance(nC, np.ndarray) and nE.size >= 2 and nC.size >= 2:
-                    tstat, p = ttest_ind(nE, nC, equal_var=False, nan_policy="omit")
-                    meanE, meanC = np.nanmean(nE), np.nanmean(nC)
-                    if meanC > 0 and np.isfinite(meanE) and np.isfinite(meanC):
-                        fc = meanE / meanC
-                        frac_diff = (meanE - meanC) / ((meanE + meanC) / 2)
-                    else:
-                        fc, frac_diff = np.nan, np.nan
-                else:
-                    p, fc, frac_diff = np.nan, np.nan, np.nan
-                p_vals.append(p)
-                fc_vals.append(fc)
-                frac_diffs.append(frac_diff)
 
-            # Assign results
-            combined["n_val_p_value"] = p_vals
-            combined["-log10n_val_p"] = -np.log10(
-                pd.to_numeric(combined["n_val_p_value"], errors="coerce").replace(0, np.nan)
+            # Run for nL only (replace your current Welch t-test block)
+
+
+            # --- MacKinnon nL test: write legacy columns directly ---
+            combined = run_mackinnon_tests_from_df(
+                df=combined,
+                experiment=exp,      # e.g., "A2"
+                control=ctl,         # e.g., "E3"
+                params=("nL",),      # nL only; function is nL-focused for legacy output
+                center="median",     # or "mean" if you prefer
+                B=None,              # None -> use function's internal default in mackinnon_p_from_boot
+                B2=None,             # set to 199 if you want double-bootstrap refinement
+                seed=0,
+                denom_mode="observed",
+                print_every=250,     # heartbeat in console
+                verbose=False        # True prints per-row skip reasons
             )
-            combined["n_val_FC"] = fc_vals
-            combined["log2_n_val_FC"] = np.log2(
-                pd.to_numeric(combined["n_val_FC"], errors="coerce").replace(0, np.nan)
-            )
-            combined["n_val_fraction_difference"] = frac_diffs
+
+
 
             # ------------------------------------------------------------------
             # Asymptote metrics (parametric Welch-style t-test using SE and imported dof)
@@ -1162,8 +1695,8 @@ class Experiment:
             # 0. Safeguard prerequisite columns
             # ------------------------------------------------------------------
             required_cols = [
-                f"{exp}_abundance_mean",
-                f"{ctl}_abundance_mean",
+                f"{exp}_abundance_median",
+                f"{ctl}_abundance_median",
                 f"Abundance rate_{exp}",
                 f"Abundance rate_{ctl}",
             ]
@@ -1173,8 +1706,8 @@ class Experiment:
                 if col not in combined.columns:
                     raise ValueError(f"Missing required column for flux calculation: {col}")
             
-            Ae = _num(combined[f"{exp}_abundance_mean"])
-            Ac = _num(combined[f"{ctl}_abundance_mean"]).replace(0, tiny)
+            Ae = _num(combined[f"{exp}_abundance_median"])
+            Ac = _num(combined[f"{ctl}_abundance_median"]).replace(0, tiny)
             
             ke = _num(combined[f"Abundance rate_{exp}"])
             kc = _num(combined[f"Abundance rate_{ctl}"])

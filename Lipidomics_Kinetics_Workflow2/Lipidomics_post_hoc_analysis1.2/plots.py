@@ -210,103 +210,6 @@ def filter_dataframe(
     Apply flexible row-level filters to a DataFrame.
 
     Supports:
-      - Numeric comparisons in string form: '< 1', '>= 0.05', '>1.3'
-      - Dict ranges: {'min': 0, 'max': 1, 'min_op': '>=', 'max_op': '<='}
-      - 'in:' and 'not in:' substring filters for text columns
-      - Bool and exact-value matches
-    """
-    df = df.copy()
-    combined = pd.Series(True, index=df.index)
-
-    ops = {
-        '<': operator.lt, '<=': operator.le,
-        '>': operator.gt, '>=': operator.ge,
-        '=': operator.eq
-    }
-
-    for col, condition in filters.items():
-        if col not in df.columns:
-            continue
-
-        mask = pd.Series(True, index=df.index)
-
-        # --- Numeric range dict syntax ---
-        if isinstance(condition, dict):
-            min_val = condition.get("min", float("-inf"))
-            max_val = condition.get("max", float("inf"))
-            min_op = condition.get("min_op", ">=")
-            max_op = condition.get("max_op", "<=")
-            col_num = pd.to_numeric(df[col], errors="coerce")
-            mask &= (col_num > min_val) if (min_op == ">") else (col_num >= min_val)
-            mask &= (col_num < max_val) if (max_op == "<") else (col_num <= max_val)
-
-        # --- Boolean exact match ---
-        elif isinstance(condition, bool):
-            mask &= (df[col] == condition)
-
-        # --- String filters ---
-        elif isinstance(condition, str):
-            low = condition.strip().lower()
-
-            # text membership filters
-            if low.startswith("in:"):
-                substrings = condition.split(":", 1)[1].split(",")
-                rx = "|".join(map(lambda s: str(s).strip(), substrings))
-                mask &= df[col].astype(str).str.contains(rx, na=False)
-
-            elif low.startswith("not in:"):
-                substrings = condition.split(":", 1)[1].split(",")
-                rx = "|".join(map(lambda s: str(s).strip(), substrings))
-                mask &= ~df[col].astype(str).str.contains(rx, na=False)
-
-            # numeric comparison strings (e.g., "< 1", ">=0.5")
-            elif re.match(r"^\s*[<>]=?\s*-?\d+(\.\d+)?\s*$", condition.strip()):
-                for sym, fn in ops.items():
-                    if condition.strip().startswith(sym):
-                        try:
-                            thresh = float(condition.strip().lstrip("<>=").strip())
-                            col_num = pd.to_numeric(df[col], errors="coerce")
-                            mask &= fn(col_num, thresh)
-                        except ValueError:
-                            mask &= False
-                        break
-
-            # exact equality fallback
-            else:
-                mask &= (df[col].astype(str) == condition)
-
-        # --- Fallback for numeric/other types ---
-        else:
-            mask &= (df[col] == condition)
-
-        combined &= mask
-
-    # --- Mask or subset output ---
-    if columns_to_nan is None:
-        return df.loc[combined]
-    eff_cols = set(columns_to_nan).union(filters.keys())
-    df.loc[~combined, list(eff_cols)] = np.nan
-    return df
-
-
-
-
-import pandas as pd
-import numpy as np
-import operator
-import re
-from typing import Optional, List
-
-
-def filter_dataframe(
-    df: pd.DataFrame,
-    columns_to_nan: Optional[List[str]] = None,
-    **filters
-) -> pd.DataFrame:
-    """
-    Apply flexible row-level filters to a DataFrame.
-
-    Supports:
       - Numeric comparisons: '< 1', '>= 0.05', '> other_column'
       - Dict ranges with scalars or columns:
             {'min': 0, 'max': 'ref_col', 'min_op': '>=', 'max_op': '<'}
@@ -574,148 +477,18 @@ def volcano(ax,
         ax.set_title(label)
 
 
+def _build_points_df(df, x_col, y_col, label, metric, plot_group, filtered):
+    return pd.DataFrame({
+        "Comparison": label,
+        "Metric": metric,
+        "Plot_Group": plot_group,
+        "Filtered": filtered,
+        "Delta": df[y_col] - df[x_col],
+        "X": df[x_col],
+        "Y": df[y_col],
+    })
 
 
-
-def scatter_ttest(
-    ax,
-    df_all: pd.DataFrame,
-    df_filtered: pd.DataFrame,
-    x_col: str,
-    y_col: str,
-    category_col: str = 'Ontology',
-    styles: Optional[Dict[str, Dict[str, str]]] = None,
-    point_size: float = 32.0,
-    axis_titles: Optional[List[str]] = None,
-    Experiment_lower: Optional[str] = None,
-    Experiment_upper: Optional[str] = None,
-    Control_lower: Optional[str] = None,
-    Control_upper: Optional[str] = None,
-    x_lim: Optional[float] = None,
-    y_lim: Optional[float] = None,
-    comparison_label: Optional[str] = None,
-    filters_applied: Optional[Dict[str, Any]] = None,
-    metric_label: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Paired scatter plot with t-tests and in-panel Δ-bar summaries."""
-    data_all = df_all.dropna(subset=[x_col, y_col]).copy()
-    data_all[x_col] = pd.to_numeric(data_all[x_col], errors='coerce')
-    data_all[y_col] = pd.to_numeric(data_all[y_col], errors='coerce')
-    data_all = data_all.dropna(subset=[x_col, y_col])
-
-    data_filt = df_filtered.dropna(subset=[x_col, y_col]).copy()
-    data_filt[x_col] = pd.to_numeric(data_filt[x_col], errors='coerce')
-    data_filt[y_col] = pd.to_numeric(data_filt[y_col], errors='coerce')
-    data_filt = data_filt.dropna(subset=[x_col, y_col])
-
-    # ─── Stats ─────────────────────────────────────────────────────────────
-    if len(data_all) > 1:
-        t_all, p_all = stats.ttest_rel(data_all[y_col], data_all[x_col])
-        mean_diff_all = (data_all[y_col] - data_all[x_col]).mean()
-    else:
-        t_all, p_all, mean_diff_all = np.nan, np.nan, np.nan
-
-    if len(data_filt) > 1:
-        t_f, p_f = stats.ttest_rel(data_filt[y_col], data_filt[x_col])
-        mean_diff_f = (data_filt[y_col] - data_filt[x_col]).mean()
-    else:
-        t_f, p_f, mean_diff_f = np.nan, np.nan, np.nan
-
-    n_all, n_filt = len(data_all), len(data_filt)
-
-    # ─── Scatter Plot ──────────────────────────────────────────────────────
-    excluded = data_all.loc[~data_all.index.isin(data_filt.index)]
-    if category_col in data_all.columns:
-        cats = list(pd.unique(data_all[category_col].dropna()))
-        styles = styles or build_ontology_styles(cats)
-        for c in cats:
-            sub_ex = excluded[excluded[category_col] == c]
-            if not sub_ex.empty:
-                ax.scatter(sub_ex[x_col], sub_ex[y_col],
-                           s=point_size, marker=styles[c]['marker'],
-                           color='lightgrey', linewidths=0.0)
-        for c in cats:
-            sub_in = data_filt[data_filt[category_col] == c]
-            if not sub_in.empty:
-                ax.scatter(sub_in[x_col], sub_in[y_col],
-                           s=point_size, marker=styles[c]['marker'],
-                           color=styles[c]['color'], linewidths=0.0)
-    else:
-        ax.scatter(excluded[x_col], excluded[y_col], s=point_size, color='lightgrey', linewidths=0.0)
-        ax.scatter(data_filt[x_col], data_filt[y_col], s=point_size, alpha=0.9)
-
-    # ─── Axis Limits / Equalize ────────────────────────────────────────────
-    if x_lim is not None: ax.set_xlim(0, x_lim)
-    if y_lim is not None: ax.set_ylim(0, y_lim)
-    if x_lim is None and y_lim is None:
-        ax.relim(); ax.autoscale_view()
-        x0, x1 = ax.get_xlim(); y0, y1 = ax.get_ylim()
-        xr, yr = (x1 - x0), (y1 - y0)
-        if np.isfinite(xr) and np.isfinite(yr):
-            if xr > yr:
-                yc, half = 0.5*(y0+y1), 0.5*xr; ax.set_ylim(yc-half, yc+half)
-            else:
-                xc, half = 0.5*(x0+x1), 0.5*yr; ax.set_xlim(xc-half, xc+half)
-
-    # y=x line
-    try:
-        x0, x1 = ax.get_xlim(); y0, y1 = ax.get_ylim()
-        lo, hi = min(x0, y0), max(x1, y1)
-        ax.plot([lo, hi], [lo, hi], linestyle=':', color='grey', linewidth=1, zorder=0)
-    except Exception:
-        pass
-
-    # ─── Axis Labels ───────────────────────────────────────────────────────
-    exp_id, ctrl_id = None, None
-    if isinstance(comparison_label, str) and ' vs ' in comparison_label:
-        parts = comparison_label.split(' vs ', 1)
-        if len(parts) == 2:
-            exp_id, ctrl_id = parts[0], parts[1]
-
-    if axis_titles and len(axis_titles) >= 2:
-        if ctrl_id and exp_id:
-            ax.set_xlabel(f"{ctrl_id} {axis_titles[1]}")
-            ax.set_ylabel(f"{exp_id} {axis_titles[0]}")
-        else:
-            ax.set_xlabel(axis_titles[0])
-            ax.set_ylabel(axis_titles[1])
-
-    # ─── In-plot LaTeX Summary ─────────────────────────────────────────────
-    def _fmt(val: float, small_fmt="{:.2e}", large_fmt="{:.2f}") -> str:
-        try:
-            return small_fmt.format(val) if np.isfinite(val) and abs(val) < 1e-2 else large_fmt.format(val)
-        except Exception:
-            return str(val)
-
-    all_str = (
-        f"$\\bar{{d}}_{{all}}$ = {_fmt(mean_diff_all)}, "
-        f"t = {_fmt(t_all, '{:.2f}', '{:.2f}')}, "
-        f"p = {_fmt(p_all, '{:.2e}', '{:.3f}')}"
-    )
-    filt_str = (
-        f"$\\bar{{d}}_{{filtered}}$ = {_fmt(mean_diff_f)}, "
-        f"t = {_fmt(t_f, '{:.2f}', '{:.2f}')}, "
-        f"p = {_fmt(p_f, '{:.2e}', '{:.3f}')}"
-    )
-    summary_text = f"{all_str}\n{filt_str}"
-
-
-
-    # ─── Return Stats Dict ─────────────────────────────────────────────────
-    stats_entry = {
-        "Comparison": comparison_label or "",
-        "Metric": metric_label or "",
-        "Mean_Diff_All": mean_diff_all,
-        "Mean_Diff_Filtered": mean_diff_f,
-        "t_All": t_all,
-        "p_All": p_all,
-        "t_Filtered": t_f,
-        "p_Filtered": p_f,
-        "N_All": n_all,
-        "N_Filtered": n_filt,
-        "Filters_Applied": str(filters_applied or {}),
-    }
-    return summary_text, stats_entry
 
 
 
@@ -859,6 +632,28 @@ def scatter_ttest(
         return name.strip()
 
     clean_metric = _short_metric(metric_label)
+    
+    
+    
+    points_all = _build_points_df(
+    data_all,
+    x_col, y_col,
+    comparison_label,
+    metric_label,
+    plot_group=None,      # filled later
+    filtered=False
+    )
+    
+    points_filt = _build_points_df(
+        data_filt,
+        x_col, y_col,
+        comparison_label,
+        metric_label,
+        plot_group=None,
+        filtered=True
+    )
+
+    points_df = pd.concat([points_all, points_filt], ignore_index=True)
 
     # ─── Return Stats Dict ─────────────────────────────────────────────────
     stats_entry = {
@@ -875,7 +670,8 @@ def scatter_ttest(
         "Filters_Applied": str(filters_applied or {}),
     }
 
-    return summary_text, stats_entry
+    return summary_text, stats_entry, points_df
+
 
 
 
@@ -1038,6 +834,7 @@ def create_plots(
     return any gathered paired-test statistics.
     """
     statistics_records = []   # 🆕 Collect stats dictionaries here
+    datapoint_records = []
 
     primary_filters = primary_filters or {}
     secondary_filters = secondary_filters or {}
@@ -1106,7 +903,7 @@ def create_plots(
 
         elif analysis_type == 'scatter_ttest':
             # 🧩 New structured output
-            summary, stat_dict = scatter_ttest(
+            summary, stat_dict, points_df = scatter_ttest(
                 ax,
                 df_all=df_primary,
                 df_filtered=df_secondary,
@@ -1127,6 +924,7 @@ def create_plots(
                 metric_label=title or analysis_type
             )
 
+
             if isinstance(stat_dict, dict):
                 # --- Ensure correct Plot_Group labeling ---
                 if plot_group and isinstance(plot_group, str) and plot_group.strip():
@@ -1134,18 +932,24 @@ def create_plots(
                 elif title and isinstance(title, str) and title.strip():
                     group_label = title.strip()
                 else:
-                    # Fallback: try to infer from label (e.g. "HighOrder_Ethers vs A3")
                     if isinstance(label, str) and "_" in label:
                         group_label = label.split("_")[0]
                     else:
                         group_label = "Uncategorized"
             
+                # ✅ Stats get Plot_Group
                 stat_dict["Plot_Group"] = group_label
-            
-                # Preserve column order (Plot_Group first)
                 ordered = {"Plot_Group": stat_dict.pop("Plot_Group")}
                 ordered.update(stat_dict)
                 statistics_records.append(ordered)
+            
+                # ✅ Datapoints ALSO get Plot_Group
+                if isinstance(points_df, pd.DataFrame) and not points_df.empty:
+                    points_df = points_df.copy()
+                    points_df["Plot_Group"] = group_label
+            
+                datapoint_records.append(points_df)
+    
 
 
 
@@ -1232,6 +1036,19 @@ def create_plots(
         out = os.path.join(output_dir, f'{safe}.svg')
         fig.savefig(out, format='svg')
 
+
     # 🆕 Return unified dataframe if any stats collected
     stats_df = pd.DataFrame(statistics_records)
-    return {"figure": fig, "statistics_df": stats_df} if not stats_df.empty else fig
+    
+    if datapoint_records:
+        points_df = pd.concat(datapoint_records, ignore_index=True)
+    else:
+        # No scatter_ttest datapoints were generated (e.g., all panels skipped due to missing columns)
+        points_df = pd.DataFrame(columns=["Comparison","Metric","Plot_Group","Filtered","Delta","X","Y"])
+    
+    return {
+        "figure": fig,
+        "statistics_df": stats_df,
+        "datapoints_df": points_df,
+    }
+

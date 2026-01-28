@@ -18,7 +18,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
-
+from gui import update_progress
+import seaborn as sns
+import re
 
 # OR: ignore by category (safer)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -29,8 +31,12 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from pandas.errors import PerformanceWarning
 warnings.filterwarnings("ignore", category=PerformanceWarning)
 
+def safe_filename(s: str) -> str:
+    """Make a string safe for filenames."""
+    s = re.sub(r"[^\w\s-]", "", str(s)).strip()
+    s = re.sub(r"[\s]+", "_", s)
+    return s[:180]  # avoid super long filenames
 
-GROUPS = ("A2","A3","A4")  # change if your group labels differ
 
 def generate_comparison_tables(stats_df: pd.DataFrame, output_dir: str = ".", font_size: int = 10, alpha: float = 0.05):
     """
@@ -160,15 +166,6 @@ def generate_comparison_tables(stats_df: pd.DataFrame, output_dir: str = ".", fo
 
 
 
-def pivot_wide(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
-    """Make wide table: index=analyte_id, columns=A2/A3/A4 for `value_col`."""
-    w = df.pivot_table(index="analyte_id", columns="group_name",
-                       values=value_col, aggfunc="first")
-    for g in GROUPS:
-        if g not in w.columns:
-            w[g] = np.nan
-    return w[list(GROUPS)]
-
 def robust_z(s: pd.Series) -> tuple[pd.Series, float, float]:
     """MAD-based robust z-score (0.6745*MAD makes it ~std under normality)."""
     x = pd.to_numeric(s, errors="coerce")
@@ -288,8 +285,10 @@ def _volcano_fixed_xy(section_name: str):
         return ("log2_rate_FC", "-log10rate_P", dict(title="Rate Volcano", x_size=4, y_size=4))
     if s == "asymptote":
         return ("asymptote_difference", "-log10_asymptote_p", dict(title="Asymptote Volcano", x_size=0.75))
-    if s in ("nl", "n l", "n_l", "n-value", "n-value".lower()):
+
+    if s in ("nl", "n l", "n_l", "n-value"):
         return ("n_val_fraction_difference", "-log10n_val_p", dict(title="N-value Volcano", x_size=2, y_size=4))
+
     if s == "flux":
         return ("log2_flux_FC", "-log10flux_p", dict(title="Total Flux Volcano", x_size=3, y_size=4))
     if s in ("synthesis flux", "synth_flux", "synth flux"):
@@ -334,7 +333,7 @@ def _conformity_fixed(section_name: str):
             x_col="Control_abundance_median",
             y_col="Experiment_abundance_median",
             title="Abundance Paired t-test",
-            axis_titles=["Control Median Abundance", "Experiment Median Abundance"],
+            axis_titles=["Control median Abundance", "Experiment median Abundance"],
             ensure_same_axis=True,
         )
 
@@ -386,9 +385,17 @@ def _conformity_fixed(section_name: str):
 
 
 
-def run_plots_from_gui_config(cfg: Dict[str, Any], experiments, plots_dir) -> pd.DataFrame:
+
+
+
+
+
+
+
+def run_plots_from_gui_config(cfg: Dict[str, Any], experiments, plots_dir) -> Dict[str, pd.DataFrame]:
 
     collected_stats = []
+    collected_points = []
 
     def _build_plot_groups(experiments):
         ontology_values = set()
@@ -496,6 +503,8 @@ def run_plots_from_gui_config(cfg: Dict[str, Any], experiments, plots_dir) -> pd
                 )
 
                 _maybe_add_filters(kwargs, item, conformity=False)
+                
+                
                 res = create_plots(**kwargs)
                 if isinstance(res, dict) and isinstance(res.get("statistics_df"), pd.DataFrame):
                     collected_stats.append(res["statistics_df"])
@@ -523,24 +532,33 @@ def run_plots_from_gui_config(cfg: Dict[str, Any], experiments, plots_dir) -> pd
                     **fixed,
                 )
                 _maybe_add_filters(kwargs, item, conformity=True)
+                
                 res = create_plots(**kwargs, plot_group=group_name)
                 if isinstance(res, dict) and isinstance(res.get("statistics_df"), pd.DataFrame):
                     collected_stats.append(res["statistics_df"])
-
+                    collected_points.append(res["datapoints_df"])
 
     
+
     if collected_stats:
         stats_df = pd.concat(collected_stats, ignore_index=True)
-        # Sort by p_All ascending (most significant first)
         if "p_All" in stats_df.columns:
-            stats_df = stats_df.sort_values(by="p_All", ascending=True, na_position="last").reset_index(drop=True)
+            stats_df = stats_df.sort_values(
+                by="p_All", ascending=True, na_position="last"
+            ).reset_index(drop=True)
     else:
         stats_df = pd.DataFrame()
     
-    return stats_df
-
-
-
+    points_df = (
+        pd.concat(collected_points, ignore_index=True)
+        if collected_points else pd.DataFrame()
+    )
+    
+    return {
+        "statistics_df": stats_df,
+        "datapoints_df": points_df,
+    }
+    
 
 
 
@@ -563,6 +581,7 @@ def main():
     # Containers to receive results built inside the GUI callback
     stats_container: Dict[str, Optional[pd.DataFrame]] = {"df": None}
     experiments_container: Dict[str, Optional[List[Experiment]]] = {"list": None}
+    datapoints_container: Dict[str, Optional[pd.DataFrame]] = {"df": None}
 
     # Normalization dataframe (shared across experiments)
     NORMALIZATION_DF: Optional[pd.DataFrame] = None
@@ -571,10 +590,14 @@ def main():
     # GUI
     # --------------------------------------------------
     def establish_plots_with_gui():
+
         def on_analyze(config_tree: Dict[str, Any]):
             nonlocal NORMALIZATION_DF
-
+        
             try:
+                # Progress: starting
+                update_progress(0, 100, "Preparing analysis...")
+        
                 # ----------------------------------
                 # mTIC abundance normalization
                 # ----------------------------------
@@ -583,20 +606,20 @@ def main():
                     .get("Settings", {})
                     .get("perform_abundance_normalization", False)
                 )
-
+        
                 if do_norm:
+                    update_progress(10, 100, "Loading normalization file...")
                     norm_path = filedialog.askopenfilename(
                         title="Select normalization dataframe",
                         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
                     )
-
+        
                     if not norm_path:
                         raise RuntimeError(
                             "Abundance normalization was enabled, but no normalization file was selected."
                         )
-
+        
                     NORMALIZATION_DF = pd.read_csv(norm_path)
-
                     print(
                         f"[GUI] ✅ Abundance normalization enabled "
                         f"({len(NORMALIZATION_DF):,} rows loaded from {norm_path})"
@@ -604,78 +627,97 @@ def main():
                 else:
                     NORMALIZATION_DF = None
                     print("[GUI] Abundance normalization DISABLED")
-
+        
                 # ----------------------------------
                 # Standards normalization settings
                 # ----------------------------------
                 settings = config_tree.get("Settings", {})
-                
+        
                 use_standards_norm = bool(
                     settings.get("use_standards_normalization", False)
                 )
-                
+        
                 standards_baseline_group = settings.get(
                     "standards_baseline_group",
                     "A3"
                 )
-
+        
                 print(
                     f"[GUI] Standards normalization "
                     f"{'ENABLED' if use_standards_norm else 'DISABLED'}"
                 )
-                
+        
                 if use_standards_norm:
                     print(
                         f"[GUI] Standards baseline group: "
                         f"{standards_baseline_group}"
                     )
-                
-
+        
                 # ----------------------------------
                 # Build experiments
                 # ----------------------------------
+                update_progress(20, 100, "Building experiments...")
                 experiments: List[Experiment] = []
-
+                total_pairs = len(pairs)
+                # Give the build phase some meaningful progress increments
+                # We’ll map 20% -> 50% across experiment builds.
                 for idx, pair in enumerate(pairs, start=1):
+                    # Increment progress during experiment building
+                    build_phase_progress = 20 + int((idx / max(total_pairs, 1)) * 30)
+                    update_progress(build_phase_progress, 100, f"Building experiment {idx}/{total_pairs}")
+        
                     exp = Experiment(
                         file_paths=file_paths,
                         pair=pair,
                         all_ids=all_ids,
                         number=idx,
-                        total=len(pairs),
+                        total=total_pairs,
                         normalization_df=NORMALIZATION_DF,
-                        normalize_by_standards= use_standards_norm,
-                        baseline = standards_baseline_group
+                        normalize_by_standards=use_standards_norm,
+                        baseline=standards_baseline_group
                     )
                     experiments.append(exp)
-
+        
                 experiments_container["list"] = experiments
-
+        
                 # ----------------------------------
                 # Run plots according to GUI config
                 # ----------------------------------
-                stats_df = run_plots_from_gui_config(
+
+                update_progress(50, 100, "Starting plot generation...")
+                
+                results = run_plots_from_gui_config(
                     config_tree,
                     experiments,
                     plots_dir
                 )
-
-                if isinstance(stats_df, dict) and "statistics_df" in stats_df:
-                    stats_df = stats_df["statistics_df"]
-
+                
+                stats_df = results.get("statistics_df")
+                datapoints_df = results.get("datapoints_df")
+                
+                # Store statistics (into the container from main())
                 if isinstance(stats_df, pd.DataFrame) and not stats_df.empty:
                     stats_container["df"] = stats_df
                     print(f"[GUI] ✅ Collected {len(stats_df):,} rows of statistical output.")
                 else:
                     stats_container["df"] = None
                     print("[GUI] ⚠️ No statistical results were produced.")
+                
+                # Store datapoints (into the container from main())
+                if isinstance(datapoints_df, pd.DataFrame) and not datapoints_df.empty:
+                    datapoints_container["df"] = datapoints_df
+                    print(f"[GUI] ✅ Collected {len(datapoints_df):,} datapoints.")
+                else:
+                    datapoints_container["df"] = None
+                    print("[GUI] ⚠️ No datapoints collected.")
 
+        
                 # ----------------------------------
                 # Completion popup
                 # ----------------------------------
                 from gui import _ROOT
                 from tkinter import messagebox
-
+        
                 if _ROOT is not None:
                     _ROOT.after(
                         0,
@@ -685,25 +727,34 @@ def main():
                             "Please close the window using the 'X' to finish."
                         ): messagebox.showinfo("Analysis Complete", msg)
                     )
-
+        
                 print(f"[GUI] ✅ Analysis complete. Plots saved to: {plots_dir}")
-
+        
                 # ----------------------------------
                 # Write final merged dataframe
                 # ----------------------------------
                 final_df = build_final_dataframe(experiments)
-
+        
                 if not final_df.empty:
                     final_out = os.path.join(plots_dir, "final_results.csv")
                     final_df.to_csv(final_out, index=False)
                     print(f"[GUI] ✅ Final dataframe written to: {final_out}")
                 else:
                     print("[GUI] ⚠️ Final dataframe empty — nothing written.")
-
+        
+                # Final progress update
+                update_progress(100, 100, "Done.")
+        
             except Exception as e:
                 import traceback
                 traceback.print_exc()
                 print(f"[ERROR] Analysis failed: {e}")
+                # Ensure the progress bar shows failure/completion state
+                try:
+                    update_progress(100, 100, "Failed")
+                except Exception:
+                    pass
+
 
         # Register and launch GUI
         set_on_analyze(on_analyze)
@@ -712,12 +763,134 @@ def main():
     # Launch GUI
     establish_plots_with_gui()
 
+
     # --------------------------------------------------
     # Post-GUI cleanup + exports
     # --------------------------------------------------
     statistics_df = stats_container.get("df", None)
-
     stats_csv = os.path.join(parent_dir, "paired_ttest_statistics.csv")
+    
+    # --- NEW: Save datapoints dataframe (raw) ---
+    datapoints_df = datapoints_container.get("df", None)
+    
+    
+    # --- Boxplot: Filtered vs Unfiltered (single clean block) ---
+    if isinstance(datapoints_df, pd.DataFrame) and not datapoints_df.empty:
+        required_cols = {"Plot_Group", "Delta", "Filtered"}
+    
+        if required_cols.issubset(datapoints_df.columns):
+            plot_df = datapoints_df.copy()
+    
+            # Coerce Delta to numeric
+            plot_df["Delta"] = pd.to_numeric(plot_df["Delta"], errors="coerce")
+    
+            # Clean Plot_Group
+            plot_df["Plot_Group"] = plot_df["Plot_Group"].astype(str).str.strip()
+            plot_df.loc[plot_df["Plot_Group"].isin(["", "nan", "None"]), "Plot_Group"] = np.nan
+    
+            # Normalize Filtered to boolean (or NaN)
+            def _to_bool(v):
+                s = str(v).strip().lower()
+                if s in ("true", "t", "1", "yes", "y"):
+                    return True
+                if s in ("false", "f", "0", "no", "n"):
+                    return False
+                return np.nan
+    
+            plot_df["Filtered"] = plot_df["Filtered"].map(_to_bool)
+    
+            # Drop rows missing plot essentials
+            plot_df = plot_df.dropna(subset=["Plot_Group", "Delta", "Filtered"])
+    
+            # OPTIONAL: save the cleaned/plot-ready datapoints
+            cleaned_csv = os.path.join(parent_dir, "datapoints_for_boxplot.csv")
+            try:
+                if not plot_df.empty:
+                    plot_df.to_csv(cleaned_csv, index=False)
+                    print(f"Saved cleaned datapoints: {cleaned_csv}")
+            except Exception as e:
+                print(f"Warning: could not save cleaned datapoints: {e}")
+    
+            # Plot only if there is something to plot
+
+
+            for i in (True, False):
+                USE_FILTERED = i
+                
+    
+                
+                # --- Ensure Filtered is actually boolean (handles TRUE/FALSE strings) ---
+                # If your column is already bool, this is harmless.
+                plot_df = plot_df.copy()
+                if plot_df["Filtered"].dtype == object:
+                    plot_df["Filtered"] = plot_df["Filtered"].astype(str).str.upper().map({"TRUE": True, "FALSE": False})
+                
+                # --- Subset based on the boolean toggle ---
+                subset_df = plot_df[plot_df["Filtered"] == USE_FILTERED].copy()
+                
+                if subset_df.empty:
+                    print(f"No rows found where Filtered == {USE_FILTERED}. Nothing to plot.")
+                else:
+                    # Optional: consistent ordering of Plot_Group (alphabetical)
+                    plot_group_order = sorted(subset_df["Plot_Group"].dropna().unique())
+                
+                    # Loop each Metric and generate a separate plot
+                    for metric, df_m in subset_df.groupby("Metric", dropna=False):
+                        if df_m.empty:
+                            continue
+                
+                        n_groups = df_m["Plot_Group"].nunique()
+                        fig_h = max(6, 0.40 * n_groups)  # make the figure taller if many groups
+                
+                        plt.figure(figsize=(12, fig_h))
+                
+                        ax = sns.boxplot(
+                            data=df_m,
+                            x="Delta",
+                            y="Plot_Group",
+                            order=plot_group_order,
+                            orient="h",
+                            hue = "Comparison"
+                        )
+                
+                        # Optional: show individual points over the boxes (nice when small n)
+                        sns.stripplot(
+                            data=df_m,
+                            x="Delta",
+                            y="Plot_Group",
+                            order=plot_group_order,
+                            orient="h",
+                            hue = "Comparison",
+                            alpha=0.35,
+                            size=3,
+                            jitter=0.15
+                        )
+                
+                        # Reference line at 0
+                        ax.axvline(0, color="gray", linestyle="--", linewidth=1)
+                
+                        ax.set_title(f"{metric}  |  Filtered = {USE_FILTERED}")
+                        ax.set_xlabel("Delta")
+                        ax.set_ylabel("Plot_Group")
+                
+                        plt.tight_layout()
+                
+                        metric_slug = safe_filename(metric)
+                        out_name = f"boxplot_{metric_slug}_Filtered_{USE_FILTERED}.png"
+                        out_path = os.path.join(parent_dir, out_name)
+                        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+                        plt.close()
+                
+                        print(f"Saved: {out_path}")
+
+
+
+        else:
+            print(f"Datapoints missing required columns {required_cols}. Skipping boxplot.")
+    else:
+        print("No datapoints available for boxplots.")
+    
+    # --- Save stats summary + comparison tables ---
     try:
         if isinstance(statistics_df, pd.DataFrame) and not statistics_df.empty:
             generate_comparison_tables(statistics_df, output_dir=parent_dir)
@@ -727,7 +900,8 @@ def main():
             print("No paired-t statistics to save.")
     except Exception as e:
         print(f"Warning: could not save statistics_df: {e}")
-
+    
+    # --- Save final merged dataframe ---
     experiments = experiments_container.get("list", None)
     if experiments:
         try:
@@ -739,7 +913,7 @@ def main():
             print(f"Warning: could not save final_df: {e}")
     else:
         print("No experiments were built. Skipping final dataframe save.")
-
+    
     print(f"Done.\nParent folder: {parent_dir}\nPlots:         {plots_dir}")
 
 

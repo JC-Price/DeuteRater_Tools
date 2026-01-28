@@ -28,18 +28,16 @@ Volcano:
         \ rate_Experiment':   {'min': 0.001, 'max': 5},\n  'Abundance R2_Control':\
         \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
         \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.5},\n  'Abundance asymptote_Experiment':\
-        \ {'min': 0, 'max': 1.5},\n  'Abundance 95pct_confidence_K_Control': {'min':\
-        \ 0, 'max': .1},\n  'Abundance 95pct_confidence_K_Experiment': {'min': 0,\
-        \ 'max': .1},\n  'MS Dial Flag': 'not in:low score,no MS2'\n}"
+        \ {'min': 0, 'max': 1.5},\n  'Abundance 95pct_confidence_K_Experiment': {'min':\
+        \ 0, 'max': .1},\n  'MS Dial Flag': 'not in:low score,no MS2'\n}"
     Asymptote:
       enabled: true
       text: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 5},\n  'Abundance\
         \ rate_Experiment':   {'min': 0.001, 'max': 5},\n  'Abundance R2_Control':\
         \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
         \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.5},\n  'Abundance asymptote_Experiment':\
-        \ {'min': 0, 'max': 1.5},\n  'Abundance 95pct_confidence_A_Control': {'min':\
-        \ 0, 'max': .25},\n  'Abundance 95pct_confidence_A_Experiment': {'min': 0,\
-        \ 'max': .25},\n  'MS Dial Flag': 'not in:low score,no MS2'\n}"
+        \ {'min': 0, 'max': 1.5},\n  'Abundance 95pct_confidence_A_Experiment': {'min':\
+        \ 0, 'max': .25},\n  'MS Dial Flag': 'not in:low score,no MS2'\n}"
     Abundance:
       enabled: true
       text: ''

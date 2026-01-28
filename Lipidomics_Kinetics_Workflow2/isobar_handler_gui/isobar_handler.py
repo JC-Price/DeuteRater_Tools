@@ -97,8 +97,13 @@ def choose_plot_directory(force: bool = False) -> str:
     Prompt user for a directory to save exported plots. If user cancels,
     fall back to a 'plots' folder next to the script/cwd. Also create and return
     a 'temp plots' subfolder inside that folder. Stores both on module and settings.
+
+    Additionally, this function sets the default final-output directory to be the
+    same folder the user chooses here (settings.output["default_output_dir"]).
     """
     global PLOT_DIR, TEMP_PLOTS_DIR
+
+    # Reuse existing choice unless force=True.
     if PLOT_DIR is not None and not force:
         # ensure temp dir exists too
         if TEMP_PLOTS_DIR is None:
@@ -108,6 +113,10 @@ def choose_plot_directory(force: bool = False) -> str:
             try:
                 setattr(settings, "_temp_plots_dir", TEMP_PLOTS_DIR)
                 setattr(settings, "_plot_dir", PLOT_DIR)
+                # --- NEW: keep default final-output directory in sync with the user's choice ---
+                if not hasattr(settings, "output") or not isinstance(settings.output, dict):
+                    settings.output = {"auto_export_final": True, "default_output_dir": None}
+                settings.output["default_output_dir"] = PLOT_DIR
             except Exception:
                 pass
         return PLOT_DIR
@@ -130,15 +139,25 @@ def choose_plot_directory(force: bool = False) -> str:
     os.makedirs(temp_dir, exist_ok=True)
     TEMP_PLOTS_DIR = temp_dir
 
-    # store on settings so other code can use settings._temp_plots_dir
+    # store on settings so other code can use settings._temp_plots_dir / _plot_dir
     try:
         setattr(settings, "_plot_dir", PLOT_DIR)
         setattr(settings, "_temp_plots_dir", TEMP_PLOTS_DIR)
+
+        # --- NEW: treat the chosen plot directory as the default final-output directory ---
+        if not hasattr(settings, "output") or not isinstance(settings.output, dict):
+            settings.output = {"auto_export_final": True, "default_output_dir": None}
+        settings.output["default_output_dir"] = PLOT_DIR
     except Exception:
         pass
 
     return PLOT_DIR
+
 # --- END change ---
+
+
+
+
 
 
 def _save_figure_svg(fig: Figure, filename: str) -> str:
@@ -366,6 +385,12 @@ class Settings:
 
         self.metabolyte_type = 'lipid'
         self.export_method = 'save'
+        
+        self.output = {
+            "auto_export_final": True,      # enable automatic final export at run end
+            "default_output_dir": None      # will be set by choose_plot_directory()
+        }
+
        
     # ── backward-compatibility shim ──────────────────────────────────────
     def __getattr__(self, name: str):
@@ -544,12 +569,37 @@ def _load_trace(fr, file_name: str, raw: bool = True):
         return arr[0], arr[1]
 
 
-
-def build_global_mtic(num_points=4000):
+def resolve_default_output_dir() -> str:
     """
-    Build a global mTIC by summing Pol1-transformed *raw* smoothed EICs
-    across all IDs and files, then (later) normalizing for plotting.
-    Falls back to pre-polynomial summed_eics if Pol1dict is missing.
+    Default final-output directory logic:
+    1) If settings.output["default_output_dir"] exists, use it as-is.
+    2) Else if settings._plot_dir or PLOT_DIR exists, use that as-is.
+    3) Else fall back to ./output (create if needed).
+    """
+    try:
+        out_dir = settings.output.get("default_output_dir", None)
+    except Exception:
+        out_dir = None
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+        return out_dir
+
+    plot_dir = getattr(settings, "_plot_dir", None) or PLOT_DIR
+    if plot_dir:
+        os.makedirs(plot_dir, exist_ok=True)
+        return plot_dir
+
+    out_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(out_dir, exist_ok=True)
+    return out_dir
+
+
+
+def build_global_mtic(num_points=4000, morphed=True):
+    """
+    Build a global mTIC by summing smoothed EICs across all IDs and files,
+    either AFTER applying Pol1 (morphed=True) or on native RT axes
+    (morphed=False). Returned intensities are unnormalized.
 
     Returns:
       (x_seconds, y_global_sum, avg_df)
@@ -561,19 +611,24 @@ def build_global_mtic(num_points=4000):
       (None, None, empty_df)
     """
     global file_specific_info
-
     empty_df = pd.DataFrame(columns=["File", "average_mTIC"])
 
+    # Fallback to pre-summed_eics if no per-EIC details or no polys
     have_polys = any(getattr(fr, "Pol1dict", None) for fr in isobar_frames.values())
-    if not have_polys:
+    if morphed and not have_polys:
+        # If requested morphed path but no polys exist, fall back to pre-summed
+        morphed = False
+
+    # --- Fast path: use precomputed 'summed_eics' if no per-EIC transform requested
+    if not morphed:
         sdict = file_specific_info.get("summed_eics", {})
         data = []
         per_file_avg = {}
 
         for fname, arr in sdict.items():
             if isinstance(arr, np.ndarray) and arr.ndim == 2 and arr.shape[1] >= 2 and arr.size:
-                x = arr[:, 0].astype(float, copy=False)
-                y = arr[:, 1].astype(float, copy=False)
+                x = arr[:, 0].astype(float, copy=False)   # seconds
+                y = arr[:, 1].astype(float, copy=False)   # raw intensities
                 if x.size and np.any(y > 0):
                     data.append((x, y))
                     per_file_avg[fname] = float(np.nanmean(y))
@@ -581,6 +636,7 @@ def build_global_mtic(num_points=4000):
         if not data:
             return None, None, empty_df
 
+        # Sum across files on a common grid
         common_x, y_sum, _ = sum_datasets(data, num_points=num_points)
 
         avg_df = (
@@ -590,7 +646,7 @@ def build_global_mtic(num_points=4000):
         )
         return (np.asarray(common_x), np.asarray(y_sum), avg_df) if common_x is not None else (None, None, avg_df)
 
-    # Pol1 path: accumulate per-file, then sum across files
+    # --- Morphed (Pol1) path: accumulate per-file on corrected RT, then sum across files
     per_file_traces = defaultdict(list)
 
     for fr in isobar_frames.values():
@@ -599,7 +655,7 @@ def build_global_mtic(num_points=4000):
         if not getattr(fr, "Pol1dict", None):
             continue
 
-        raw_dict = _get_smooth_raw(fr)  # {file.mzML: (x_raw, y_raw)}
+        raw_dict = _get_smooth_raw(fr)  # {file.mzML: (x_raw_seconds, y_raw)}
 
         for fname, (x_nat, y_nat) in raw_dict.items():
             if fname not in fr.Pol1dict:
@@ -607,14 +663,16 @@ def build_global_mtic(num_points=4000):
 
             coeffs, rmsd, lo, hi = fr.Pol1dict[fname]
 
+            # Apply Legendre morph on the (clipped) RT axis
             rt_corr = apply_legendre_polynomial(
                 rescale_to_legendre_space(x_nat, lo, hi), coeffs
             )
             x_corr = correct_retention_time(np.clip(x_nat, lo, hi), rt_corr, lo, hi)
 
-            # raw intensity; sum happens before normalization
+            # Leave intensities raw; sum happens pre-normalization
             per_file_traces[fname].append((x_corr, y_nat))
 
+        # free cached smoothing dict if you rely on memory pressure control
         fr.smooth_unnormalized_dict = None
 
     # Sum within each file on a shared grid + compute per-file average from summed curve
@@ -645,34 +703,64 @@ def build_global_mtic(num_points=4000):
     return np.asarray(common_x), np.asarray(global_sum), avg_df
 
 
-def export_global_mtic_overlay(folder_path, filename="global_mTIC_overlay.svg"):
-    """
-    Saves an SVG into folder_path overlaying:
-      • Global mTIC (sum of all files' summed_eics)
-      • Reference file's summed_eic
-    Both normalized to their own maxima (→ %).
-    """
-    global file_specific_info, settings
-    import numpy as np
 
-    x_mtic, y_mtic, avg_df = build_global_mtic()
+def export_global_mtic_overlay(
+    folder_path,
+    filename="global_mTIC_overlay.svg",
+    morphed=True
+):
+    """
+    Saves two SVGs into folder_path:
+
+      1) (existing) Global mTIC (sum across files; morphed or un-morphed per 'morphed')
+         overlaid with the reference file's native summed mTIC.
+         Both normalized to their own maxima (→ %).
+         Filename: <base>_<post|pre>.svg
+
+      2) (new) Individual per-file mTICs (not summed), each normalized to its own max (→ %),
+         all superimposed over the reference mTIC (reference drawn in black & bold).
+         Filename: <base>_perfile_<post|pre>.svg
+
+    Args:
+      folder_path: output directory
+      filename: base output file name for the global overlay ('.svg' enforced)
+      morphed: True → Pol1-based (post-alignment); False → native (pre-alignment)
+
+    Side effects:
+      - Writes SVG(s) to disk
+      - Exports per-file average_mTIC CSV for the *global build*:
+        Average_mTICs_per_mzML_<post|pre>.csv
+    """
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    from collections import defaultdict
+
+    global file_specific_info, settings
+
+    # ----------------------------
+    # (1) Build the global mTIC overlay (unchanged behavior)
+    # ----------------------------
+    x_mtic, y_mtic, avg_df = build_global_mtic(morphed=morphed)
     if x_mtic is None:
-        # Nothing to plot
         return
 
-    # Reference summed EIC
+    # Reference is the native summed TIC for the reference file
     ref_key = f"{settings.ref_file}.mzML"
     ref_arr = file_specific_info.get('summed_eics', {}).get(ref_key, None)
 
-    # Prepare plotting grid
-    if ref_arr is not None and isinstance(ref_arr, np.ndarray) and ref_arr.size and ref_arr.ndim == 2 and ref_arr.shape[1] >= 2:
+    # Prepare a common grid for global vs reference
+    if (
+        ref_arr is not None and isinstance(ref_arr, np.ndarray)
+        and ref_arr.size and ref_arr.ndim == 2 and ref_arr.shape[1] >= 2
+    ):
         ref_x = ref_arr[:, 0].astype(float, copy=False)
         ref_y = ref_arr[:, 1].astype(float, copy=False)
 
         lo = max(x_mtic.min(), ref_x.min())
         hi = min(x_mtic.max(), ref_x.max())
         if hi <= lo:
-            # No overlap; just plot the mTIC alone
             grid = x_mtic.copy()
             mtic_interp = y_mtic.copy()
             ref_interp = None
@@ -687,31 +775,193 @@ def export_global_mtic_overlay(folder_path, filename="global_mTIC_overlay.svg"):
         ref_interp = None
 
     # Normalize → %
-    mtic_norm = (mtic_interp / (mtic_interp.max() if mtic_interp.max() > 0 else 1.0)) * 100.0
+    mtic_peak = mtic_interp.max() if mtic_interp.size and mtic_interp.max() > 0 else 1.0
+    mtic_norm = (mtic_interp / mtic_peak) * 100.0
     if ref_interp is not None:
-        ref_norm = (ref_interp / (ref_interp.max() if ref_interp.max() > 0 else 1.0)) * 100.0
+        ref_peak = ref_interp.max() if ref_interp.size and ref_interp.max() > 0 else 1.0
+        ref_norm = (ref_interp / ref_peak) * 100.0
 
-    # Use a non-interactive Figure so this can run off-main-thread safely
+    # Plot the global overlay (original behavior)
     fig = Figure(figsize=(10, 6))
     ax = fig.add_subplot(111)
-    ax.plot(grid / 60.0, mtic_norm, linewidth=2, label="Global mTIC (all files)")
+    ax.plot(grid / 60.0, mtic_norm, linewidth=2,
+            label="Global mTIC (all files)")
     if ref_interp is not None:
         ax.plot(grid / 60.0, ref_norm, linewidth=1.5, linestyle='--',
                 label=f"Reference mTIC ({settings.ref_file})")
 
+    phase = "Post-alignment" if morphed else "Pre-alignment"
     ax.set_xlabel("Retention Time (min)")
     ax.set_ylabel("Intensity (% of curve max)")
-    ax.set_title("Global mTIC vs. Reference")
+    ax.set_title(f"{phase} Global mTIC vs. Reference")
     ax.grid(True, which='both', linestyle='--', linewidth=0.7)
     ax.legend(loc="best", fontsize="small")
 
-    out_name = filename if filename.lower().endswith(".svg") else f"{os.path.splitext(filename)[0]}.svg"
+    # File name (global overlay)
+    base, ext = os.path.splitext(filename)
+    suffix = "_post" if morphed else "_pre"
+    out_name = f"{base}{suffix}.svg"
     out_path = os.path.join(folder_path, out_name)
-    
     fig.savefig(out_path, format="svg", bbox_inches="tight")
     plt.close(fig)
-        
-    avg_df.to_csv(os.path.join(folder_path, "Average_mTICs_per_mzML.csv"), index=False)
+
+    # Per-file averages for this build
+    avg_df.to_csv(
+        os.path.join(folder_path, f"Average_mTICs_per_mzML{suffix}.csv"),
+        index=False
+    )
+
+    # ----------------------------
+    # (2) Build the per-file overlay (new)
+    # ----------------------------
+
+    # Helper: collect per-file summed curves depending on morphed flag
+    def _collect_per_file_sums(morphed):
+        per_file = []  # list of (file_name, x, y)
+        if not morphed:
+            # Use native precomputed summed_eics
+            sdict = file_specific_info.get("summed_eics", {})
+            for fname, arr in sdict.items():
+                if (
+                    isinstance(arr, np.ndarray) and arr.ndim == 2
+                    and arr.shape[1] >= 2 and arr.size
+                ):
+                    x = arr[:, 0].astype(float, copy=False)
+                    y = arr[:, 1].astype(float, copy=False)
+                    if x.size and np.any(y > 0):
+                        per_file.append((fname, x, y))
+            return per_file
+
+        # Morphed path: mirror build_global_mtic's logic
+        per_file_traces = defaultdict(list)
+        for fr in isobar_frames.values():
+            if getattr(fr, "hide", False):
+                continue
+            if not getattr(fr, "Pol1dict", None):
+                continue
+
+            raw_dict = _get_smooth_raw(fr)  # {file.mzML: (x_raw_seconds, y_raw)}
+            for fname, (x_nat, y_nat) in raw_dict.items():
+                if fname not in fr.Pol1dict:
+                    continue
+                coeffs, rmsd, lo, hi = fr.Pol1dict[fname]
+                # Apply Legendre morph on the (clipped) RT axis
+                rt_corr = apply_legendre_polynomial(
+                    rescale_to_legendre_space(x_nat, lo, hi), coeffs
+                )
+                x_corr = correct_retention_time(np.clip(x_nat, lo, hi), rt_corr, lo, hi)
+
+                # Keep intensities raw; we will sum within file before plotting
+                per_file_traces[fname].append((x_corr, y_nat))
+
+            # optional cleanup if used elsewhere
+            fr.smooth_unnormalized_dict = None
+
+        # Sum within each file to get a single curve per file
+        for fname, parts in per_file_traces.items():
+            cx, ysum, _ = sum_datasets(parts, num_points=4000)
+            if cx is None or ysum is None:
+                continue
+            per_file.append((fname, cx, ysum))
+        return per_file
+
+    per_file_curves = _collect_per_file_sums(morphed)
+    if not per_file_curves:
+        # Nothing to draw
+        return
+
+    # Prepare common grid vs. reference for per-file overlay
+    ref_has_curve = (
+        ref_arr is not None and isinstance(ref_arr, np.ndarray)
+        and ref_arr.size and ref_arr.ndim == 2 and ref_arr.shape[1] >= 2
+    )
+
+    if ref_has_curve:
+        ref_x = ref_arr[:, 0].astype(float, copy=False)
+        ref_y = ref_arr[:, 1].astype(float, copy=False)
+
+        # Find overlap across all curves and reference
+        mins = [x.min() for _, x, _ in per_file_curves if x.size] + [ref_x.min()]
+        maxs = [x.max() for _, x, _ in per_file_curves if x.size] + [ref_x.max()]
+        lo = max(mins) if mins else ref_x.min()
+        hi = min(maxs) if maxs else ref_x.max()
+
+        if hi <= lo:
+            grid2 = ref_x.copy()
+            ref_interp2 = ref_y.copy()
+            perfile_interp = [(fn, x.copy(), y.copy()) for fn, x, y in per_file_curves]
+        else:
+            # Use the reference length as resolution for cleaner overlay
+            grid2 = np.linspace(lo, hi, len(ref_x))
+            ref_interp2 = np.interp(grid2, ref_x, ref_y, left=0.0, right=0.0)
+            perfile_interp = []
+            for fname, x, y in per_file_curves:
+                yi = np.interp(grid2, x, y, left=0.0, right=0.0)
+                perfile_interp.append((fname, grid2, yi))
+    else:
+        # No reference: choose a grid from the densest curve
+        # (we still proceed so user gets the per-file overlay)
+        lengths = [(len(x), i) for i, (_, x, _) in enumerate(per_file_curves)]
+        base_idx = max(lengths)[1] if lengths else 0
+        _, base_x, _ = per_file_curves[base_idx]
+        lo, hi = base_x.min(), base_x.max()
+        grid2 = np.linspace(lo, hi, len(base_x))
+        ref_interp2 = None
+        perfile_interp = []
+        for fname, x, y in per_file_curves:
+            yi = np.interp(grid2, x, y, left=0.0, right=0.0)
+            perfile_interp.append((fname, grid2, yi))
+
+    # Normalize each per-file curve to its own max → %
+    perfile_norm = []
+    for fname, gx, gy in perfile_interp:
+        peak = gy.max() if gy.size and gy.max() > 0 else 1.0
+        perfile_norm.append((fname, gx, (gy / peak) * 100.0))
+
+    # Normalize reference (if available)
+    if ref_interp2 is not None and ref_interp2.size:
+        ref_peak2 = ref_interp2.max() if ref_interp2.max() > 0 else 1.0
+        ref_norm2 = (ref_interp2 / ref_peak2) * 100.0
+    else:
+        ref_norm2 = None
+
+    # Plot the per-file overlay with bold black reference
+    fig2 = Figure(figsize=(12, 7))
+    ax2 = fig2.add_subplot(111)
+
+    # Plot all per-file curves
+    # Keep legend minimal (only reference) to avoid clutter if many files exist.
+    for fname, gx, gy_norm in sorted(perfile_norm, key=lambda t: t[0]):  # sort by file name
+        ax2.plot(
+            gx / 60.0, gy_norm,
+            linewidth=1.0, alpha=0.45, zorder=1
+        )
+
+    # Plot reference in black & bold on top
+    if ref_norm2 is not None:
+        ax2.plot(
+            grid2 / 60.0, ref_norm2,
+            color='black', linewidth=2.8, zorder=10,
+            label=f"Reference mTIC ({settings.ref_file})"
+        )
+
+    phase = "Post-alignment" if morphed else "Pre-alignment"
+    ax2.set_xlabel("Retention Time (min)")
+    ax2.set_ylabel("Intensity (% of each curve's max)")
+    ax2.set_title(f"{phase} Individual mTICs vs. Reference (each normalized)")
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.7)
+
+    if ref_norm2 is not None:
+        ax2.legend(loc="best", fontsize="small")
+
+    # File name (per-file overlay)
+    base2, _ = os.path.splitext(filename)
+    out_name2 = f"{base2}_perfile{suffix}.svg"
+    out_path2 = os.path.join(folder_path, out_name2)
+    fig2.savefig(out_path2, format="svg", bbox_inches="tight")
+    plt.close(fig2)
+
+
 
 
 def list_chemical_formula(formula):
@@ -1702,13 +1952,30 @@ def _restore_protein_column_syntax(df: pd.DataFrame, original_df: pd.DataFrame) 
 
 
 
-def save_final_df():
+
+def save_final_df(folder_path: str | None = None):
+    """
+    Save final outputs non-interactively to the default output directory that was chosen
+    at the very beginning (via choose_plot_directory). If folder_path is provided, it
+    overrides the default and no dialogs are shown.
+
+    Outputs:
+      - Final_dataframe.csv
+      - Original_dataframe.csv
+      - settings.yaml
+      - Project.pkl
+      - smooth_cache/ (copied)
+      - Global mTIC overlay plot (SVG) + temp plots moved into output folder
+    """
     global isobar_frames, settings, original_df
 
     import pandas as pd
     import os
+    import shutil
+    from pathlib import Path
     from tkinter import filedialog, messagebox
-    print("Please wait while the program outputs the project folder... (will print 'Finished' when completed.")
+
+    print("Please wait while the program outputs the project folder... (will print 'Finished' when completed.)")
     settings.verbose_output = True
 
     # 1) Collect all visible alignment_dfs
@@ -1716,7 +1983,9 @@ def save_final_df():
     for fr in isobar_frames.values():
         if getattr(fr, 'hide', False) and not getattr(settings, 'verbose_output', False):
             continue
-        dfs.append(fr.alignment_df)
+        # Guard: ensure fr.alignment_df exists
+        if hasattr(fr, "alignment_df") and isinstance(fr.alignment_df, pd.DataFrame) and not fr.alignment_df.empty:
+            dfs.append(fr.alignment_df)
 
     if not dfs:
         messagebox.showinfo("Info", "No data to save.")
@@ -1724,13 +1993,24 @@ def save_final_df():
 
     output_df = pd.concat(dfs, ignore_index=True)
 
+    # 2) Resolve output folder (NON-INTERACTIVE by default)
+    # If caller didn't pass folder_path, use the early-chosen default.
+    if not folder_path:
+        try:
+            folder_path = resolve_default_output_dir()
+        except Exception:
+            # As a very last resort, keep the old behavior (optional: uncomment to prompt)
+            # folder_path = filedialog.asksaveasfilename(
+            #     title="Select Folder and Enter Name",
+            #     defaultextension="",
+            #     filetypes=[("All Files", "*.*")]
+            # )
+            # if not folder_path:
+            #     return
+            base = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
+            folder_path = os.path.join(base, "output")
+            os.makedirs(folder_path, exist_ok=True)
 
-    # 2) Ask user where to save (treat returned path as a folder)
-    folder_path = filedialog.asksaveasfilename(
-        title="Select Folder and Enter Name",
-        defaultextension="",
-        filetypes=[("All Files", "*.*")]
-    )
     if not folder_path:
         return
 
@@ -1743,17 +2023,32 @@ def save_final_df():
         output_df = output_df.drop(columns=["Metabolite name"], errors="ignore")
 
     # 4) Write outputs
-    output_df.insert(0, 'Alignment ID', output_df.pop('Alignment ID'))
-    output_df.to_csv(f'{folder_path}//Final_dataframe.csv', index=False)
+    if "Alignment ID" in output_df.columns:
+        output_df.insert(0, 'Alignment ID', output_df.pop('Alignment ID'))
+
+    final_csv_path = os.path.join(folder_path, "Final_dataframe.csv")
+    output_df.to_csv(final_csv_path, index=False)
+
+    # settings.yaml
     export_settings(settings, folder_path)
-    original_df.to_csv(f'{folder_path}//Original_dataframe.csv', index=False)
-   
+
+    # Original dataframe
+    orig_csv_path = os.path.join(folder_path, "Original_dataframe.csv")
+    original_df.to_csv(orig_csv_path, index=False)
 
     # Create and save the overlay plot (global mTIC vs reference) in the output folder
-    export_global_mtic_overlay(folder_path)
-    
-   
+    try:
+        
+        # Post-alignment (your current behavior)
+        export_global_mtic_overlay(folder_path, filename="global_mTIC_overlay.svg", morphed=True)
+        
+        # Pre-alignment (un-morphed)
+        export_global_mtic_overlay(folder_path, filename="global_mTIC_overlay.svg", morphed=False)
 
+    except Exception:
+        # Non-fatal; keep going even if overlay fails
+        if settings.verbose_exceptions:
+            print("[save_final_df] export_global_mtic_overlay failed; continuing.")
 
     # 5) Persist smoothed EIC caches alongside the project and rewrite paths
     cache_out_dir = os.path.join(folder_path, "smooth_cache")
@@ -1765,14 +2060,23 @@ def save_final_df():
             if p and isinstance(p, str) and os.path.exists(p):
                 dest = os.path.join(cache_out_dir, os.path.basename(p))
                 if os.path.abspath(p) != os.path.abspath(dest):
-                    shutil.copy2(p, dest)
-                    setattr(fr, attr, dest)
+                    try:
+                        shutil.copy2(p, dest)
+                        setattr(fr, attr, dest)
+                    except Exception:
+                        # Best-effort copy; continue
+                        if settings.verbose_exceptions:
+                            print(f"[save_final_df] Failed to copy {p} -> {dest}")
 
     # 6) Save the project AFTER paths point to the portable cache
-    save_variables(file_path=f'{folder_path}//Project.pkl')
+    try:
+        save_variables(file_path=os.path.join(folder_path, "Project.pkl"))
+    except Exception:
+        if settings.verbose_exceptions:
+            print("[save_final_df] save_variables failed; continuing.")
 
     # 7) Move any temp plots (from the chosen temp subfolder) into the project output folder
-    if settings.export_method == 'save':
+    if getattr(settings, "export_method", "save") == 'save':
         # Source temp folder where intermediate SVGs were written
         src_dir_path = getattr(settings, "_temp_plots_dir", None)
         if not src_dir_path:
@@ -1781,14 +2085,14 @@ def save_final_df():
             if plot_dir_guess:
                 src_dir_path = os.path.join(plot_dir_guess, TEMP_PLOTS_SUBDIR_NAME)
             else:
-                src_dir_path = os.path.join(os.path.dirname(__file__), TEMP_PLOTS_SUBDIR_NAME)
+                base = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
+                src_dir_path = os.path.join(base, TEMP_PLOTS_SUBDIR_NAME)
 
         src_dir = Path(src_dir_path)
         dst_dir = Path(folder_path) / TEMP_PLOTS_SUBDIR_NAME
         os.makedirs(dst_dir, exist_ok=True)
 
         if src_dir.exists():
-            # move .svg (and other files if needed)
             for f in src_dir.glob("*"):
                 try:
                     shutil.move(str(f), str(dst_dir / f.name))
@@ -1802,17 +2106,21 @@ def save_final_df():
             try:
                 for item in src_dir.iterdir():
                     if item.is_file():
-                        try: item.unlink()
-                        except Exception: pass
+                        try:
+                            item.unlink()
+                        except Exception:
+                            pass
                     else:
-                        try: shutil.rmtree(item)
-                        except Exception: pass
+                        try:
+                            shutil.rmtree(item)
+                        except Exception:
+                            pass
                 src_dir.rmdir()
             except Exception:
                 pass
 
-
     print('Finished outputting project folder. Thank you.')
+
 
 def display_buttons(scroll_to_position=None):
     global isobar_frames, container
@@ -2644,6 +2952,21 @@ def automated_alignment():
             print(f"An error occurred: {e}")
             print("Traceback:")
         traceback.print_exc()
+        
+        
+        
+        
+        # --- Auto-export final results to the folder chosen at the very beginning ---
+        try:
+            # Only run if the feature is enabled
+            if getattr(settings, "output", {}).get("auto_export_final", True):
+                out_dir = resolve_default_output_dir()   # uses the folder from choose_plot_directory()
+                save_final_df(folder_path=out_dir)       # non-interactive export
+        except Exception as e:
+            # Keep the run resilient; log only if you're in verbose exception mode
+            if getattr(settings, "verbose_exceptions", False):
+                print(f"[auto_export] Failed to export final results: {e}")
+
 
     return
 

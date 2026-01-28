@@ -32,3 +32,37 @@ Traceback (most recent call last):
                          ^^^^
 NameError: name 'root' is not defined
 
+
+================================================================================
+Timestamp: 2026-01-24T19:40:02.956845
+CWD: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui
+sys.executable: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\shared_python\Kinetic_Lipidomics_env\python.exe
+argv: ['D:\\Kinetic_Lipidomics\\Lipidomics_Kinetics_Workflow2\\isobar_handler_gui\\\\isobar_gui.py']
+__file__: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py
+Exception: NameError("name 'root' is not defined")
+Traceback:
+Traceback (most recent call last):
+  File "D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 2732, in automated_alignment
+    display_buttons()
+  File "D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 1978, in display_buttons
+    container = tk.Frame(root)
+                         ^^^^
+NameError: name 'root' is not defined
+
+
+================================================================================
+Timestamp: 2026-01-24T21:04:54.873142
+CWD: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui
+sys.executable: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\shared_python\Kinetic_Lipidomics_env\python.exe
+argv: ['D:\\Kinetic_Lipidomics\\Lipidomics_Kinetics_Workflow2\\isobar_handler_gui\\\\isobar_gui.py']
+__file__: D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py
+Exception: NameError("name 'root' is not defined")
+Traceback:
+Traceback (most recent call last):
+  File "D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 2909, in automated_alignment
+    display_buttons()
+  File "D:\Kinetic_Lipidomics\Lipidomics_Kinetics_Workflow2\isobar_handler_gui\isobar_handler.py", line 2155, in display_buttons
+    container = tk.Frame(root)
+                         ^^^^
+NameError: name 'root' is not defined
+

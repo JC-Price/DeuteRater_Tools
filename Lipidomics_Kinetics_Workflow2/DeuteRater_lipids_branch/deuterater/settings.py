@@ -546,6 +546,11 @@ def freeze(path=None, settings_dict=None):
             "binomial_min_standard_error": binomial_min_standard_error,
             "binomial_max_standard_error": binomial_max_standard_error,
 
+            # ✅ ADD THESE
+            "binomial_boot_trim_bins": binomial_boot_trim_bins,
+            "binomial_boot_density_frac": binomial_boot_density_frac,
+            "binomial_boot_median_frac_width": binomial_boot_median_frac_width,
+
         }
     if path:
         with open(path, 'w') as frozen_settings_file:
