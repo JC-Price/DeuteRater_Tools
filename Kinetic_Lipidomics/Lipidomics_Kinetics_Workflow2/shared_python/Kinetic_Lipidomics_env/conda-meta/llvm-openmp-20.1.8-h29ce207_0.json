@@ -1,0 +1,117 @@
+{
+ "build": "h29ce207_0",
+ "build_number": 0,
+ "channel": "https://repo.anaconda.com/pkgs/main/win-64",
+ "constrains": [
+  "openmp 20.1.8|20.1.8.*"
+ ],
+ "depends": [
+  "ucrt >=10.0.20348.0",
+  "vc >=14.3,<15",
+  "vc14_runtime >=14.44.35208"
+ ],
+ "extracted_package_dir": "",
+ "files": [
+  "Library/bin/libiomp5md.dll",
+  "Library/bin/libomp.dll",
+  "Library/include/omp.h",
+  "Library/include/omp_lib.h",
+  "Library/include/ompx.h",
+  "Library/lib/clang/18/include/omp.h",
+  "Library/lib/clang/19/include/omp.h",
+  "Library/lib/clang/20/include/omp.h",
+  "Library/lib/libiomp5md.lib",
+  "Library/lib/libomp.lib"
+ ],
+ "fn": "llvm-openmp-20.1.8-h29ce207_0.conda",
+ "license": "Apache-2.0 WITH LLVM-exception",
+ "link": {
+  "source": "",
+  "type": 1
+ },
+ "md5": "99efb432087f98f3711e42580fa51bb5",
+ "name": "llvm-openmp",
+ "package_tarball_full_path": "",
+ "paths_data": {
+  "paths": [
+   {
+    "_path": "Library/bin/libiomp5md.dll",
+    "path_type": "hardlink",
+    "sha256": "8167344ac4b0f0078178a6a21993075acaa3f625f7afd975dea1f72f7a231b0b",
+    "sha256_in_prefix": "8167344ac4b0f0078178a6a21993075acaa3f625f7afd975dea1f72f7a231b0b",
+    "size_in_bytes": 674120
+   },
+   {
+    "_path": "Library/bin/libomp.dll",
+    "path_type": "hardlink",
+    "sha256": "499676a5fc775d825d3a17f83187cad9d3d28c0e73f234751dc2a482fbca8650",
+    "sha256_in_prefix": "499676a5fc775d825d3a17f83187cad9d3d28c0e73f234751dc2a482fbca8650",
+    "size_in_bytes": 674120
+   },
+   {
+    "_path": "Library/include/omp.h",
+    "path_type": "hardlink",
+    "sha256": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "sha256_in_prefix": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "size_in_bytes": 24444
+   },
+   {
+    "_path": "Library/include/omp_lib.h",
+    "path_type": "hardlink",
+    "sha256": "a479e3da7e359f9613a600375d1c90f8d8d9250d5219dccc42756518bfd1564f",
+    "sha256_in_prefix": "a479e3da7e359f9613a600375d1c90f8d8d9250d5219dccc42756518bfd1564f",
+    "size_in_bytes": 50102
+   },
+   {
+    "_path": "Library/include/ompx.h",
+    "path_type": "hardlink",
+    "sha256": "c2cec2e583b8cba2d12b5876bf515aed568315d1e6ee243fb12e0f27193b9a18",
+    "sha256_in_prefix": "c2cec2e583b8cba2d12b5876bf515aed568315d1e6ee243fb12e0f27193b9a18",
+    "size_in_bytes": 7791
+   },
+   {
+    "_path": "Library/lib/clang/18/include/omp.h",
+    "path_type": "hardlink",
+    "sha256": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "sha256_in_prefix": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "size_in_bytes": 24444
+   },
+   {
+    "_path": "Library/lib/clang/19/include/omp.h",
+    "path_type": "hardlink",
+    "sha256": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "sha256_in_prefix": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "size_in_bytes": 24444
+   },
+   {
+    "_path": "Library/lib/clang/20/include/omp.h",
+    "path_type": "hardlink",
+    "sha256": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "sha256_in_prefix": "098fc2aa433072427dc68d8c289ca14fc871142e615e0064614419bb9bc15905",
+    "size_in_bytes": 24444
+   },
+   {
+    "_path": "Library/lib/libiomp5md.lib",
+    "path_type": "hardlink",
+    "sha256": "7fc644ff5c7ff8cc5ab69c1301371a1fb6f3c7a6bef25b82155c609527de956c",
+    "sha256_in_prefix": "7fc644ff5c7ff8cc5ab69c1301371a1fb6f3c7a6bef25b82155c609527de956c",
+    "size_in_bytes": 182330
+   },
+   {
+    "_path": "Library/lib/libomp.lib",
+    "path_type": "hardlink",
+    "sha256": "7fc644ff5c7ff8cc5ab69c1301371a1fb6f3c7a6bef25b82155c609527de956c",
+    "sha256_in_prefix": "7fc644ff5c7ff8cc5ab69c1301371a1fb6f3c7a6bef25b82155c609527de956c",
+    "size_in_bytes": 182330
+   }
+  ],
+  "paths_version": 1
+ },
+ "requested_spec": "None",
+ "sha256": "38b7b14914abf61a2c10347a7521016876c7285eb66d866b51b90eb28925e4f1",
+ "size": 336902,
+ "subdir": "win-64",
+ "timestamp": 1756230404000,
+ "url": "https://repo.anaconda.com/pkgs/main/win-64/llvm-openmp-20.1.8-h29ce207_0.conda",
+ "version": "20.1.8"
+}

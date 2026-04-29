@@ -1,0 +1,13 @@
+prefix=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library
+exec_prefix=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library
+libdir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/lib
+sharedlibdir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/lib
+includedir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.3.1
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}

@@ -1,0 +1,123 @@
+Homeostasis:
+  enabled: true
+  groups:
+    All: true
+    Low-order: false
+    High-order: false
+    Other:
+      enabled: false
+      text: ''
+  filters:
+    Homeostasis:
+      enabled: true
+      text: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+Volcano:
+  enabled: true
+  groups:
+    All: true
+    Low-order: true
+    High-order: true
+    Other:
+      enabled: false
+      text: ''
+  filters:
+    Rate:
+      enabled: true
+      text: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+    Asymptote:
+      enabled: true
+      text: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+    Abundance:
+      enabled: true
+      text: '{}'
+    nL:
+      enabled: true
+      text: "{\n    'num_nv_time_points_Control':    {'min': 2, 'max': 200},\n   \
+        \ 'num_nv_time_points_Experiment': {'min': 2, 'max': 200},\n    'n_value_Experiment':\
+        \ '< nH',\n    'n_value_Control': '< nH'\n}"
+    Flux:
+      enabled: true
+      text: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+    Synthesis Flux:
+      enabled: false
+      text: ''
+    Dietary Flux:
+      enabled: false
+      text: ''
+    Other:
+      enabled: false
+      text: ''
+      custom_column: e.g., custom_metric_column
+Conformity:
+  enabled: true
+  groups:
+    All: true
+    Low-order: true
+    High-order: true
+    Other:
+      enabled: true
+      text: Pre-adjusted (raw) abundance conformity
+  filters:
+    Rate:
+      enabled: true
+      primary: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+      secondary: '{}'
+    Asymptote:
+      enabled: true
+      primary: "{\n  'Abundance rate_Control':      {'min': 0.001, 'max': 1},\n  'Abundance\
+        \ rate_Experiment':   {'min': 0.001, 'max': 1},\n  'Abundance R2_Control':\
+        \        {'min': 0.6},\n  'Abundance R2_Experiment':     {'min': 0.6},\n \
+        \ 'Abundance asymptote_Control': {'min': 0, 'max': 1.2},\n  'Abundance asymptote_Experiment':\
+        \ {'min': 0, 'max': 1.2\t}\n}"
+      secondary: '{}'
+    Abundance:
+      enabled: true
+      primary: '{}'
+      secondary: '{}'
+    nL:
+      enabled: true
+      primary: "{\n    'num_nv_time_points_Control':    {'min': 2, 'max': 200},\n\
+        \    'num_nv_time_points_Experiment': {'min': 2, 'max': 200},\n    'n_value_Experiment':\
+        \ '< nH',\n    'n_value_Control': '< nH'\n}"
+      secondary: '{}'
+    Flux:
+      enabled: false
+      primary: ''
+      secondary: ''
+    Synthesis Flux:
+      enabled: false
+      primary: ''
+      secondary: ''
+    Dietary Flux:
+      enabled: false
+      primary: ''
+      secondary: ''
+    Other:
+      enabled: false
+      primary: ''
+      secondary: ''
+      custom_column: ''
+Settings:
+  normalization:
+    method: none
+    baseline: null

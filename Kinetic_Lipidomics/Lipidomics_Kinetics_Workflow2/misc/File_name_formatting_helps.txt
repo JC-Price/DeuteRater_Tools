@@ -1,0 +1,43 @@
+Make sure cage-type is always before genotype (works on .mzMLs). For CRISPR study. 
+
+
+Get-ChildItem -Path . -File -Filter *.mzML | ForEach-Object {
+>>     $newBaseName = $_.BaseName -replace '(?<!\w)(E[234])-(2v3|4v3)(?!\w)', '$2-$1'
+>>
+>>     if ($newBaseName -ne $_.BaseName) {
+>>         $newName = $newBaseName + $_.Extension
+>>         $targetPath = Join-Path $_.DirectoryName $newName
+>>
+>>         if (-not (Test-Path -LiteralPath $targetPath)) {
+>>             Rename-Item -LiteralPath $_.FullName -NewName $newName
+>>             Write-Host "Renamed: $($_.Name) -> $newName"
+>>         }
+>>         else {
+>>             Write-Warning "Skipping '$($_.Name)' because '$newName' already exists."
+>>         }
+>>     }
+>> }
+
+
+
+Make sure "pos" or "neg" is always in front of the time point:
+Get-ChildItem -Path . -File -Filter *.mzML | ForEach-Object {
+    $newBaseName = $_.BaseName -replace '-(D\d+)-(\d+)-(pos|neg)$', '-$3-$1-$2'
+
+    if ($newBaseName -ne $_.BaseName) {
+        $newName = $newBaseName + $_.Extension
+        $targetPath = Join-Path $_.DirectoryName $newName
+
+        if (-not (Test-Path -LiteralPath $targetPath)) {
+            Rename-Item -LiteralPath $_.FullName -NewName $newName
+            Write-Host "Renamed: $($_.Name) -> $newName"
+        }
+        else {
+            Write-Warning "Skipping '$($_.Name)' because '$newName' already exists."
+        }
+    }
+}
+``
+
+
+

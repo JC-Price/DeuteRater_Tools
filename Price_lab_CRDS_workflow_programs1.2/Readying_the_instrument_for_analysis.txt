@@ -1,0 +1,157 @@
+Here is a quick walkthrough of the steps you should take to ensure the 
+LGR instrument is ready to go!
+
+Note: If you have issues or questions at any time while you are setting up
+the instrument, or if you notice it is starting to run weird, please read 
+the manual! There is one for the autosampler and one for the LGR itself. Both
+are located in the cabinet above the instrument (the right-most). 
+
+What you will need to bring:
+1. Your samples
+2. A spray bottle of isopropyl alcohol
+3. A pair of scisors
+4. An open vial filled with distilled water
+
+Steps:
+1.Always, always parafilm your samples.
+
+This one is a make or break. If done improperly you risk your run stopping
+prematurely and the syringe becoming damaged. Grab some parafilm and an
+autosampler tray from the instrument and cut the parafilm into horizontal 
+strips. Take one of those strips and wrap it around roughly middle of your 
+sample in such a way that all of the layers are on top of eachother. 
+Then test you sample in the autosampler tray. It should fit VERY snuggly, 
+so much so that you can lift up the tray without the sample's angle shifting 
+almost at all. If it still seems a little lose, add some more! After you
+have parafilmed your samples DO NOT put them in the fridge. It appears that
+the cold tends to make the samples fit less tightly. 
+
+We have had many cases where improper sample parafilming has stopped runs in
+their place. In most cases, when the needle is withdrawn from the sample, it 
+inadvertently carries the vial along with it, resulting in the vial being 
+forcefully rammed multiple times onto the LGR inlet. We have walked into the 
+water facility lab and found our sample vials scattered all across the 
+workstation as they were thrown about by the autosampler. 
+
+
+2.Make sure your syringe is clean and the piston moves smoothly 
+(do not press "clean syringe" on the autosampler user interface)
+
+This one is also very important. Go over to the autosampler display screen and press 
+"Change Syringe". This will cause the arm of the autosampler to move and get into 
+a position that allows the syringe to be removed. Slide up the plexiglass screen and 
+loosen the top red nut above the syringe. Then, gently remove the syringe by carefully 
+tilting it out and pulling up. Be aware of the position of the piston and syringe body, 
+as you will need to recreate the setup when you are putting the syringe back
+(basically, the piston is resting on a higher ledge than the syringe body). Also be 
+cautious not to bend the needle too much as you are removing the syringe.
+
+Now that the syringe is out, carefully move the piston exactly straight up and down
+without completely removing the piston (the piston is a black cylinder that moves up
+and down along a thin wire, removing the piston all the way out from the shaft of the 
+syringe risks bending the very thin wire; once the wire is bent, it is a ticking time 
+bomb before the syringe breaks due to increased wear and tear). While moving
+the piston up and down you should feel a little bit of resistance and maybe feel or 
+hear "grittiness" as you actuate the syringe. This is normal, as far as I am 
+aware and is probably the result of slight corrosion. Holding the syringe vertically
+(with the needle down) make a small pool of isopropanol over the hole on the top of the
+syringe shaft. Cohesion should prevent the IPA from going into the hole, carefully 
+actuate the piston between 0 and 0.8uL many times. You will notice that the shaft of the
+syringe will begin to fill with liquid and you may notice an opaque liquid begining to come
+out the bottom of the syringe and the liquid in the syringe shaft will star to become more 
+cloudy as well. You will probably notice the syringe starting to have less friction as well. 
+This is good, the syringe is not ready to use yet. If you were to let the IPA dry at this point
+you would notice the syringe start to have more friction again, and any water you pipette will be 
+very dirty. After you have acutated the syringe for a few minutes with the IPA in the shaft, flip 
+the syringe so the needle is facing upwards at a slight angle and carefully pull the piston almost
+all of the way out, then take a kimtech wipe and twist it so that you have a tight point and touch
+tip to the liquid in the shaft. The liquid will remove . Pfrom the shaft into the kimtech wipe (it should
+make the tip of the kimtech wipe a slight grey-black color). Now, reapply more fresh IPA to the shaft 
+and continue to actuate the piston. Rinse and repeat this process of filling with IPA, actuating, 
+removing gross grey IPA with the kimtech wipe until you are sure the pipette is clean. After each cycle, 
+pull up about 1uL of distilled water into the syringe, then hold the syringe vertically with the needle 
+down and expel the water so a drop is hanging from the tip. Note the color of the liquid. If it has any 
+opaqueness, it is not clean yet.  
+
+Once the syringe is clean it should actuate very smoothly and any expelled water should be crystal clear.
+
+As a final effort to make sure the syringe is clean, put the needle of the syringe in the vial of 
+distilled water and actuate up and down many times. At this point the syringe should be ready to go. 
+
+
+3. Putting back the syringe:
+There is a bent needle on the bottem shelf of the top right cabinent over the LGR, grab it. 
+
+Back at the autosampler open up the plexiglass and carefully thread the needle through the syringe seat foot
+(thing with the hole in it that touches the top of the samples). This may be difficult to do without bending
+the needle. It is crucial that you do not bend it, so I have found that putting slight pressure on the back
+side of the needle with the bent needle from the cabinent helps the syringe needle thread through the syringe
+seat foot. Keeping the syringe as verticle as possible put the t-shaped part of the syringe in the appropriate
+spot with the piston pulled up to about the 0.6 uL spot. As you are directing the syringe into position the 
+piston head should fit into the chamber with the red nut. Tighten the nut, close the plexiglass and tell the 
+autosampler the syringe has been replaced. At this point the arm of the autosampler should move back to its
+null position. 
+
+4. Replacing the septum
+
+There is a red septum that the needle passes through during sample collection. This red septum is good for up to
+~800 injections. Since the LGR will do 8 injections per sample, and there are usually around 100 samples, we just
+switch out the septum every time we run the instrument. Replacement septa can be found in the same cabinent we
+have been referencing for this whole walkthrough. 
+
+Go over to the LGR instrument and click on "Setup", and then click on "change septum" and then "start". 
+The LGR will then begin to depressurize. Once that process is completed, go over to the needle inlet and twist off
+the metal cap (Warning: This thing is hot, so be prepared. You may use a paper-towel if you want. I would at least
+use gloves. Be careful as you are removing the metal cap to not disturb the black conical piece directly underneith. 
+It is sometimes attached to the septum and so is often removed when the metal cap is taken off. If the black piece
+comes out, make sure it is very clean before putting it back (spaying with IPA and waiting until it is dry is probably
+sufficient). Take the bent needle from before and use it to remove the red septum from the inside of the black cap. 
+Remove any pieces of the septa that may have come off inside of the cap. Place a new septum into the cap with the hole 
+facing up (towards where the needle will enter). Make sure it is fitted levely into the cap, and then replace the cap. 
+Tighten the cap until it is snug and then a little bit furthur. Then tell the instrument that the septum is replaced. 
+
+Once the instrument is pumped down you are almost done! 
+
+4. Put your sample trays into the correct positions on the autosampler, make sure the worklist is ready and hit start. 
+(We are not actually starting yet, we are going to watch the first couple samples and make sure everything is acting 
+properly). 
+
+5. Evaluating the quality of the spectrum
+After the first couple of injections and measurements click spectrum. If everything is working properly there should 
+be three peaks in the spectrum and not really anything else (one per cell). The middle peak should also be exactly in 
+the middle of the middle cell (if so, it means that the lazer is properly adjusted). 
+
+- If the spectrum is not aligned properly, it is an easy fix. Notice if the spectrum is too far to the right or too far 
+to the left. Click on "Setup" and then "Spectrum alignment". If the spectrum was too far to the left, click the left 
+arrow one or two times, do the same for the right if the spectrum is too far to the right. Exit setup and start the run again. 
+After a few samples check the alignment of the sample again and make more adjustments as neccesary. Usually the spectrum is 
+pretty well aligned so this should not be that time consuming. 
+
+-If the spectrum is dirty (i.e. if the spectrum has more than 3 peaks; usually there are three main ones and many many small
+ones), the only good solution I have come up with is simily letting the LGR run for an hour or two and then coming back and
+restarting the collection again. It is ok if the samples are repeatedly drawn from because the silicon lids make a pretty good 
+seal and we have never had any issues with them. Usually after an hour or so the contaminants have flushed themselves out
+and the spectrums gets cleaned up. 
+
+6. Making sure enough water is entering the LGR lazer-cell and that it is running well in general
+As you have been testing the LGR thus far, you may have noticed the "Flag" column in the LGR data. This column is describing the
+"states"  of the different water samples. YOu may notice oiso, hiso, dens, pres or norm come up. If you see lots of norm, that 
+probably means that everything is fine, but a lot of the other flags usually indicates something is up. I have noticed that 
+contamination causes the osio flag to occur a lot, and sometimes the hiso tag as well. Hiso means there is large amount of variability
+in the H/D isotope ratio, which is what we are testing! So make sure that there are not too many hiso tags. dens and pres are related 
+to the amount of water that is acutally able to reach the detector cell. With the amount of water we are injecting expect between 3E6
+6E6 water molecules per injection (you can veiw this number in the data as well). It is also normal for the start of an LGR run to have 
+a low amount of water molecules, which then becomes higher and higher until they stabilize around 4E6 or 5E6. This is part of the reason 
+why I like to do one or two "prep" runs before the real thing. If the number of water molecules remains low this could mean that there is
+an issue with your syringe. If this is paired with dense or pres flags, this is oftentimes an issue with the tightness of the metal cap, or
+that the septum is angled and squished, as opposed to being flush with the needle port. Again, it is super normal to have many flags in the 
+begining of a run as the LGR cavity replaces its native air with water vapor, so give it a little bit of time (at least an hour) before you start
+reading the manual for potential solutions.
+
+7. Finally begin:
+After you have completed all of the checks here and properly setup your worklist, you should be good to finall start the run. Make sure to check in 
+with you run regularly. Even after all of the safeguards, sometimes things just happen and it's better to catch the problems early on. Sometimes it is
+hard to predict how long your run will last, but I have found that around 100 samples takes about a day or so. Good luck!
+(make sure to see \Price_lab_CRDS_workflow_programs\LGR_guidefile generator\SETTING_UP_LGR_READ_ME.txt)
+
+

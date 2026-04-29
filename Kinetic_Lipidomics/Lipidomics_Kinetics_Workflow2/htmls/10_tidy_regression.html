@@ -1,0 +1,160 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Building the Tidy Regression Matrix</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+      max-width: 960px;
+      margin: auto;
+    }
+    h1 { color: #126782; font-size: 1.9rem; margin-bottom: 16px; }
+    h2 { color: #1f618d; margin-top: 24px; margin-bottom: 8px; }
+    h3 { color: #333; margin-top: 16px; margin-bottom: 6px; font-size: 1.1rem; }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code { background: #eef3f7; padding: 2px 5px; border-radius: 4px; font-size: 0.95rem; }
+    pre  { background: #eef3f7; padding: 10px 14px; border-radius: 8px; overflow-x: auto; }
+    em { color: #444; }
+    .hint { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>Building the Tidy Regression Matrix</h1>
+
+<div class="box">
+  <h2>Purpose of this step</h2>
+  <p>
+    The <strong>tidy regression matrix</strong> converts the wide lipidomics export into a long, analysis‑ready
+    table for downstream modeling—covering abundance, turnover rate (<em>k</em>), asymptote (<em>A</em>), n‑value (n<sub>L</sub>),
+    and their associated <strong>standard errors (SEs)</strong>. This structure feeds genotype/diet/age/region regressions
+    and n<sub>L</sub> component analyses.   </p>
+</div>
+
+<div class="box">
+  <h2>What this tool does (exact behavior)</h2>
+  <ol>
+    <li><strong>Shows a pre‑filter dialog</strong> <em>before</em> selecting the wide CSV, letting you set:
+      <ul>
+        <li>Exponential‑decay <strong>R² cutoff</strong> (default shown in the dialog).</li>
+        <li><strong>Maximum asymptote (A)</strong> threshold.</li>
+        <li><strong>Maximum Abundance rate (K)</strong> threshold.</li>
+        <li><strong>n<sub>L</sub> &lt; nH</strong> enforcement toggle.</li>
+      </ul>
+      Failing entries are set to <code>NaN</code> at the wide level so they are dropped during the melt.    </li>
+    <li><strong>Strict header normalization</strong> of per‑sample columns to either
+       <code>&lt;METRIC_TOKEN&gt;_&lt;sample_id&gt;</code> or <code>&lt;sample_id&gt;_&lt;METRIC_TOKEN&gt;</code>,
+       from a fixed allow‑list of metric tokens (e.g., <code>abundance_mean</code>, <code>n_value</code>,
+       <code>Abundance rate</code>, <code>Abundance asymptote</code>, and BA/SE variants). Only normalized matches are kept. 
+    </li>
+    <li><strong>Normalizes auxiliary columns</strong> required for filtering:
+      <ul>
+        <li><code>Abundance R2</code> columns standardized to <code>Abundance R2_&lt;sample&gt;</code>
+            (accepting both metric_sample and sample_metric forms).</li>
+        <li><code>nH</code> (hydrogen count) detected case‑insensitively and renamed to <code>nH</code>.</li>
+      </ul>
+    </li>
+    <li><strong>Back‑fills Ontology</strong> from the first token of <code>Alignment ID</code> if <code>Ontology</code> is blank,
+        and warns if the same <code>Alignment ID</code> maps to multiple ontologies.</li>
+    <li><strong>Applies wide‑level filters</strong> using your R²/A/K thresholds and optional n<sub>L</sub>&nbsp;&lt;&nbsp;nH rule:
+        <ul>
+          <li>If a sample fails (R² below cutoff, or A/K above maxima), the script sets
+              <code>Abundance rate_&lt;sample&gt;</code> and <code>Abundance asymptote_&lt;sample&gt;</code> to <code>NaN</code>
+              for those rows. </li>
+          <li>When n<sub>L</sub>&nbsp;&lt;&nbsp;nH is enabled and violated, <code>n_value_&lt;sample&gt;</code> is set to <code>NaN</code>. </li>
+        </ul>
+    </li>
+    <li><strong>Wide → Long (melt) of metrics</strong> into columns:
+        <code>Alignment ID</code>, optional <code>Ontology</code>, <code>metric</code>, <code>sample_id</code>, <code>value</code>. </li>
+    <li><strong>SE attachment</strong>: melts the available SE columns once and <em>joins</em> them back by
+        (<code>Alignment ID</code>, <code>metric</code>, <code>sample_id</code>) to produce a tidy table with
+        <code>value</code> and <code>se</code> per observation (supports <code>n_value_SE</code>, <code>Abundance SE_K</code>,
+        <code>Abundance SE_A</code>, <code>abundance_se</code>, and BA SE variants).</li>
+    <li><strong>Interpretation dictionary</strong>: prompts for a Python‑dict/JSON mapping to decode each
+        <code>sample_id</code> into regression variables (e.g., genotype, housing, sex), with support for
+        <code>map</code>, <code>regex</code>, <code>group</code>, <code>type</code>, and <code>order</code>. </li>
+    <li><strong>Saves</strong> the tidy dataframe to CSV via a save‑as dialog (default filename:
+        <code>tidy_lipid_regression_with_ci.csv</code>). </li>
+  </ol>
+</div>
+
+<div class="box">
+  <h2>Inputs & outputs</h2>
+  <ul>
+    <li><strong>Input:</strong> one <em>wide</em> lipidomics CSV that includes per‑sample metric columns and
+        <code>Alignment ID</code> (and optionally <code>Ontology</code>). </li>
+    <li><strong>Prompt:</strong> interpretation dictionary (Python dict or JSON) for deriving regression variables from <code>sample_id</code>. </li>
+    <li><strong>Output:</strong> a <em>tidy</em> CSV with columns like
+      <code>Alignment ID</code>, optional <code>Ontology</code>, <code>metric</code>, <code>value</code>, <code>se</code>,
+      plus any decoded design‑matrix variables (e.g., <code>genotype</code>, <code>sex</code>, …). 
+    </li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Workflow overview (tidy creation)</h2>
+  <ol>
+    <li><strong>Normalize & filter (wide)</strong>: canonicalize headers; enforce R²/A/K and optional n<sub>L</sub>&nbsp;&lt;&nbsp;nH; drop sentinel values (e.g., −4). </li>
+    <li><strong>Melt metrics</strong> (<code>abundance_mean</code>, <code>n_value</code>, <code>Abundance rate</code>, <code>Abundance asymptote</code>, plus BA) into long rows. </li>
+    <li><strong>Add SEs</strong> by melting SE columns once and joining by ID/metric/sample to populate <code>se</code>. </li>
+    <li><strong>Interpret sample_id</strong> into variables using your dict (<code>map</code> and/or <code>regex</code>) with optional dtype and ordering. </li>
+  </ol>
+</div>
+
+<div class="box">
+  <h2>Interpretation dictionary (examples)</h2>
+  <p>Provide a Python dict or JSON that maps parts of <code>sample_id</code> to analysis variables.</p>
+
+  <h3>Single‑factor example</h3>
+  <pre><code>{
+  "genotype": {
+    "map": {"A2": "APOE2", "A3": "APOE3", "A4": "APOE4"},
+    "type": "category",
+    "order": ["APOE3", "APOE2", "APOE4"]
+  }
+}</code></pre>
+
+  <h3>Multi‑factor example</h3>
+  <pre><code>{
+  "genotype": {"E2": "APOE2", "E3": "APOE3", "E4": "APOE4"},
+  "housing": {"2v3": "2v3", "4v3": "4v3"},
+  "sex": {"YM": "Male", "YF": "Female"}
+}</code></pre>
+
+  <p class="hint">You can also use <code>"regex"</code> with <code>"group"</code> to extract tokens, and specify <code>"type"</code> / <code>"order"</code> for categorical encoding.</p>
+</div>
+
+<div class="box">
+  <h2>Notes & guardrails</h2>
+  <ul>
+    <li>Only columns whose names strictly match the supported metric tokens are considered during normalization; others are ignored. </li>
+    <li>SEs are used; if a needed SE column is absent, the <code>se</code> field is left blank for that observation. )</li>
+    <li>When <code>Ontology</code> is missing, it is inferred from the first term in <code>Alignment ID</code> only where blank, and a warning is shown if an <code>Alignment ID</code> maps to multiple ontologies. </li>
+  </ul>
+</div>
+
+<!-- Optional Windows runner -->
+<a href="run:Creating_tidy_regression_matrix\Creating_tidy_regression_matrix.cmd" data-label="Build Tidy Regression Matrix">
+  <div class="hidden-run">Build Tidy Regression Matrix</div>
+</a>
+<p class="hint">
+  If <code>Creating_tidy_regression_matrix\Creating_tidy_regression_matrix.cmd</code> is present,
+  the “Build Tidy Regression Matrix” button will execute it. On macOS/Linux, run the Python script directly.
+</p>
+
+</body>
+</html>

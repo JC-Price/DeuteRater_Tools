@@ -1,0 +1,256 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DeuteRater — Full Kinetic Analysis</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    .hint { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+    ul.checklist { margin-left: 1.2rem; }
+    ul.checklist li { margin: 6px 0; }
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .tag {
+      display: inline-block;
+      background: #eef3f7;
+      border: 1px solid #d7e3ec;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      color: #1f4a66;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>DeuteRater — Full Kinetic Analysis</h1>
+
+<div class="box">
+  <h2>Purpose of this step</h2>
+  <p>
+    The <strong>Full Kinetic Analysis</strong> in <em>DeuteRater</em> performs empirical fitting of lipid isotopologue data to quantify
+    the <strong>incorporable deuterium count (<em>n<sub>L</sub></em>)</strong>, <strong>fraction of endogenous synthesis (<em>A<sub>syn</sub></em>)</strong>,
+    and <strong>turnover rate constant (<em>k</em>)</strong> for each lipid species. 
+    This stage converts isotopic envelope data into quantitative kinetic metrics central to lipidome-wide metabolism modeling.
+  </p>
+
+  <p>
+    If you have already completed the <strong>Extraction</strong> step (recommended when combining positive and negative polarities),
+    simply open DeuteRater, ensure your <em>settings file</em> is loaded, and enable all processing steps <em>except</em> Extraction.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Guidefile Input (if Extraction was not run separately)</h2>
+  <p>
+    If you skipped the standalone Extraction step, DeuteRater will automatically use your
+    <strong>guidefile</strong>—the MS-DIAL–derived file prepared in “Prepare Data for IH/DR”.
+    When launched, keep <strong>Extraction</strong> checked, load your guidefile, and proceed with a full run.
+  </p>
+  <ul class="checklist">
+    <li>Open DeuteRater → select <strong>Lipidomics</strong> mode.</li>
+    <li><strong>Load your settings</strong> (including the required and recommended parameters below).</li>
+    <li><strong>Enable Extraction</strong> and select your <em>guidefile</em> when prompted.</li>
+    <li>Provide your <strong>Time &amp; Enrichment</strong> table when requested, then run the analysis.</li>
+  </ul>
+  <p class="hint">
+    The guidefile supplies per-lipid targets and retention-time seeds, allowing DeuteRater to extract isotopologue envelopes
+    and estimate <em>n<sub>L</sub></em>, <em>A<sub>syn</sub></em>, and <em>k</em> directly.
+  </p>
+</div>
+
+<div class="box">
+  <h2>What DeuteRater performs during analysis</h2>
+  <ol>
+    <li>Loads isotopologue intensities (positive and negative modes merged via standardized lipid IDs).</li>
+    <li>Calculates <em>n<sub>L</sub></em> empirically for each lipid or adduct.</li>
+    <li>Fits exponential turnover models to derive <em>k</em> and <em>A<sub>syn</sub></em>.</li>
+    <li>Applies R²-based quality filters and outlier controls for reliable kinetic estimation.</li>
+    <li>Generates rate constants, fraction-new values, and quality-control plots for all identified lipids.</li>
+  </ol>
+  <p class="hint">
+    Keep <strong>Calculate Experimental N-Values</strong> ON. 
+    Lipid <em>n<sub>L</sub></em> values are pathway-dependent and vary across tissues and conditions, 
+    making empirical estimation essential for accurate kinetic interpretation (<em>Nielsen et&nbsp;al.,&nbsp;2026</em>).
+  </p>
+</div>
+
+<div class="box">
+  <h2>Starting from the Extraction Step</h2>
+  <ul class="checklist">
+    <li>Open DeuteRater → select <strong>Lipidomics</strong>.</li>
+    <li><strong>Load your prior settings profile</strong> (used during Extraction).</li>
+    <li><strong>Uncheck Extraction</strong> and enable all subsequent steps to continue the workflow.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Required Settings</h2>
+  <ul class="checklist">
+    <li><strong>Asymptote Calculation</strong>: <em>Variable</em></li>
+    <li><strong>Calculate Experimental N-Values</strong>: <em>On</em></li>
+  </ul>
+  <p class="hint">
+    * <em>n<sub>L</sub></em> represents the number of exchangeable hydrogens incorporated with deuterium.
+    This value cannot be derived from structure alone and must be determined empirically under your experimental conditions.
+  </p>
+
+  <h2>Recommended Settings</h2>
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/DeuteRater_settings.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:100%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+    <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+</div>
+
+<div class="box">
+  <h2>Time &amp; Enrichment Metadata</h2>
+  <p>
+    DeuteRater requires a table describing sample collection times and body-water enrichment
+    for each individual. Enrichment can be determined using <strong>Cavity Ring-Down Spectroscopy (CRDS)</strong>,
+    <strong>Isotope-Ratio Mass Spectrometry (IRMS)</strong>, among other techniques.
+  </p>
+
+  <p>When the <em>Time &amp; Enrichment</em> table appears, include the following columns:</p>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><strong>Filename</strong> — auto-filled by DeuteRater</li>
+        <li><strong>Time</strong> — sampling time point (consistent units)</li>
+        <li><strong>Enrichment</strong> — body-water deuterium fraction or percentage</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li><strong>Sample Group</strong> — biological condition or genotype</li>
+        <li><strong>Biological Replicate</strong> — replicate number</li>
+        <li><strong>Calculate_N_Value</strong> — toggle per-sample <em>n<sub>L</sub></em> estimation</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="hint">
+    For multi-day labeling studies, longer labeling durations (e.g., 16–32 days) yield more robust <em>n<sub>L</sub></em> estimates.
+    In <em>Nielsen et&nbsp;al.,&nbsp;2026</em>, <em>n<sub>L</sub></em> was derived from day 16 and day 32 subjects.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>n<sub>L</sub> quality-control plots</strong> for each lipid/adduct.</li>
+    <li><strong>Rate-curve visualizations</strong> (e.g., <em>R²</em> > 0.6) and aggregate statistics of valid fits.</li>
+    <li><code>rates_by_sequence.tsv</code> — turnover constants (<em>k</em>) and model metadata.</li>
+    <li><code>fraction_new.tsv</code> — fraction-new values across time points (<em>A<sub>syn</sub></em> trajectories).</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Finding <em>n<sub>L</sub></em> by fitting the Labeling Probability Equation</h2>
+  <ul>
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Labeling_probability_equation_sequestering_hydrogen.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong>The Labeling Probability Equation predicts the isotope spectra of a hydrogen-only molecule:</strong> If all of the hydrogen atoms of a labeled lipid molecule are conceptually gathered together this equation can describe its isotope distribution. This is useful because a hydrogen-only spectra can easily be deconvoluted from a molecule's empirical distribution. In this form the equation becomes simple enough to easily fit to our empirical data in DeuteRater. This is how we empirically solve for <em>n<sub>L</sub></em>. Below is a description of the variables involved. 
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+  </ul>
+<ul>
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Labeling_probability_equation_variables.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong>Variables of the Labeling Probabilty Equation</strong>
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+  </ul>
+
+<ul>
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Labeling_probability_equation_term_descriptions.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong>Conceptual description of the Labeling Probability Equation:</strong>The total probability of observing <em>i</em> incorporated labels at time <em>t</em>,
+<em>Pr(i,t)</em>, is modeled as a weighted sum of contributions from pre-existing (“old”)
+unlabeled molecules and newly synthesized (“new”) labeled molecules. The time-dependent
+weighting functions <em>F<sub>old</sub>(t)</em> and <em>F<sub>new</sub>(t)</em> describe first-order
+turnover, with the fraction of old molecules decaying exponentially and the fraction of new
+molecules increasing correspondingly after label introduction. This framework links molecular
+turnover kinetics to the evolving hydrogen-only isotope distributions used to fit
+<em>n<sub>L</sub></em>. The first term in the description of <em>Pr<sub>new</sub></em> is a gamma-function
+variant of the binomial coefficient, allowing non-integer <em>n<sub>L</sub></em> values to be fit.
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+  </ul>
+
+
+</div>
+
+
+
+
+
+
+<a href="run:DeuteRater_lipids_branch\__main__.cmd" data-label="Open DeuteRater">
+  <div class="hidden-run">Open DeuteRater</div>
+</a>
+
+<p class="hint">
+  If you completed the Extraction step earlier, load the same settings and leave Extraction unchecked to continue.
+  Otherwise, enable all steps, select your guidefile, and verify that your settings match the recommendations above.
+</p>
+
+<p class="hint">If <code>DeuteRater_lipids_branch\__main__.cmd </code>is present, the “Open DeuteRater” button will initialize it.
+
+</p>
+
+</body>
+</html>

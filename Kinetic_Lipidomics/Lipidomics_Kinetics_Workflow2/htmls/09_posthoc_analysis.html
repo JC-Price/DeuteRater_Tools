@@ -1,0 +1,188 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Post‑hoc Analysis & Statistics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.65;
+      max-width: 960px;
+      margin: auto;
+    }
+    h1 { color: #126782; font-size: 1.9rem; margin-bottom: 16px; }
+    h2 { color: #126782; font-size: 1.35rem; margin-top: 26px; margin-bottom: 10px; }
+    h3 { color: #333; margin-top: 16px; margin-bottom: 6px; font-size: 1.1rem; }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code { background: #eef3f7; padding: 2px 5px; border-radius: 4px; font-size: 0.95rem; }
+    pre  { background: #eef3f7; padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+    ul   { margin: 6px 0 12px 24px; }
+    .hint { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+    footer { margin-top: 28px; color: #555; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+<h1>Post‑hoc Analysis & Statistics</h1>
+
+<h2>Purpose of this module</h2>
+<div class="box">
+  <p>
+    This module bridges <strong>kinetic quantification</strong> and <strong>biological interpretation</strong>.
+    It consolidates replicate‑level and model‑level metrics (abundance, turnover rate <em>k</em>, asymptote <em>A</em>, n<sub>L</sub>)
+    into consistent comparisons between experimental and control groups, and generates volcano, conformity, and homeostasis
+    plots grouped by ontology and higher‑order categories.
+  </p>
+  <p><strong>Design choice:</strong> Adducts are <em>not</em> collapsed—each <code>Alignment ID</code> is analyzed as its own observation to preserve polarity/adduct‑specific behavior.</p>
+</div>
+
+<h2>How to run</h2>
+<div class="box">
+  <ol>
+    <li><strong>Select CSV files</strong> (one or more) containing your merged/wide metrics.</li>
+    <li><strong>Enter experiment–control pairs</strong> when prompted, e.g., <code>(A2,A3),(A4,E3)</code>.</li>
+    <li>When the GUI opens, use its tabs (<em>Homeostasis, Volcano, Conformity, Settings</em>) to choose plots, set filters, and pick normalization.</li>
+    <li>Click <strong>Analyze</strong>. All outputs are written under <code>Analysis/&lt;versioned folder&gt;/</code> next to your data.</li>
+  </ol>
+  <p class="hint">You can import/export a YAML configuration in the <em>Settings</em> tab to reproduce identical runs later.</p>
+</div>
+
+<h2>Normalization (Settings tab)</h2>
+<div class="box">
+  <p>Choose one global method (applied consistently across experiments):</p>
+  <ul>
+    <li><strong>None (raw)</strong> — uses your input values as is.</li>
+    <li><strong>mTIC</strong> — per‑polarity total‑ion current style scaling from in‑matrix abundances.</li>
+    <li><strong>Standards (requires baseline)</strong> — robust log<sub>2</sub> regression mapping of Experiment and Control to a specified baseline group, applied <em>per polarity</em>.</li>
+    <li><strong>Quantile</strong> — per‑polarity quantile normalization (log<sub>2</sub> → QN → linear).</li>
+  </ul>
+  <p class="hint">For Standards normalization, provide a baseline group label (e.g., <code>A3</code>, which is used in Nielsen et al. 2026).</p>
+</div>
+
+<h2>What the analysis computes</h2>
+<div class="box">
+  <ul>
+    <li><strong>Abundance</strong> (replicate‑level):
+      <ul>
+        <li>Welch’s t‑test on <em>log2</em> replicate abundances (Experiment vs Control).</li>
+        <li>BH FDR adjusted p‑values, fold‑change (FC) and <code>-log10</code> p written to the table.</li>
+      </ul>
+    </li>
+    <li><strong>Turnover rate (<em>k</em>)</strong> and <strong>Asymptote (<em>A</em>)</strong> (model‑level):
+      <ul>
+        <li>Per‑row <em>canonical Wald tests</em> using covariance (and diagonal fallbacks if needed).</li>
+        <li>Individual tests for <em>k</em> and <em>A</em> plus a joint (A,k) omnibus Wald.</li>
+      </ul>
+    </li>
+    <li><strong>Flux</strong>:
+      <ul>
+        <li>Total flux metrics (<code>Flux_Experiment = k_Experiment × Abundance_Experiment</code>, likewise for Control).</li>
+        <li>P‑values via <em>Fisher’s method</em> combining the rate and abundance p‑values.</li>
+      </ul>
+    </li>
+  </ul>
+  <p class="hint">The analysis also attaches intuitive significance flags (FC thresholds + statistical cutoffs) for abundance and rate to support plotting and filtering.</p>
+</div>
+
+<h2>Filters (applied inside tabs)</h2>
+<div class="box">
+  <p>Each plot tab supports flexible row‑level filters. Supported forms:</p>
+  <ul>
+    <li><strong>Numeric comparisons</strong> in strings: <code>"> 1.3"</code>, <code>"<= 0.05"</code>, or even <code>"> Other_Column"</code> (column‑to‑column).</li>
+    <li><strong>Ranges</strong> in dicts: <code>{"min": 0, "max": 5}</code>, with optional <code>min_op</code>/<code>max_op</code> to control strictness.</li>
+    <li><strong>Text membership</strong>: <code>"in:PE,PC"</code>, <code>"not in:low score,no MS2"</code>.</li>
+    <li><strong>Booleans</strong> and <strong>exact equality</strong>.</li>
+  </ul>
+  <p><strong>Token replacement:</strong> Where a filter key or column reference contains <code>Experiment</code> or <code>Control</code>, those tokens are replaced with the current IDs (e.g., <code>abundance_median_log2_Experiment</code> → <code>abundance_median_log2_A2</code>).</p>
+  <p class="hint">Note: Filters use token substitution; <em>wildcard</em> expansion of column names (e.g., <code>*</code>) is not performed.</p>
+</div>
+
+<h2>Plot tabs & axes</h2>
+<div class="box">
+  <h3>Homeostasis</h3>
+  <ul>
+    <li>Panels per group (All, Ontology_*, HighOrder_*).</li>
+    <li>X = <code>log2_abn_FC</code>, Y = <code>log2_rate_FC</code>; background shows 0 axes and the y = −x reference line.</li>
+    <li>Optional outlines can reflect combined significance states.</li>
+  </ul>
+
+  <h3>Volcano</h3>
+  <ul>
+    <li>Metric‑specific x/y:
+      <ul>
+        <li><strong>Abundance</strong>: X = <code>log2_abn_FC</code>, Y = <code>-log10abnBH</code></li>
+        <li><strong>Rate</strong>: X = <code>log2_rate_FC</code>, Y = <code>-log10rate_P</code></li>
+        <li><strong>Asymptote</strong>: X = <code>asymptote_difference</code>, Y = <code>-log10_asymptote_p</code></li>
+        <li><strong>Total Flux</strong>: X = <code>log2_flux_FC</code>, Y = <code>-log10flux_p</code></li>
+      </ul>
+    </li>
+    <li>Default thresholds: |log<sub>2</sub>FC| = 1 (vertical lines), −log<sub>10</sub>p = 1.3 (horizontal line).</li>
+  </ul>
+
+  <h3>Conformity (paired / one‑sample t‑tests)</h3>
+  <ul>
+    <li><strong>Abundance</strong> (one‑sample on log2FC across paired rows): X = Control mean log<sub>2</sub>, Y = Experiment mean log<sub>2</sub>.</li>
+    <li><strong>Rate</strong>, <strong>Asymptote</strong>, <strong>Flux</strong> (paired): X = Control metric, Y = Experiment metric.</li>
+    <li>Panels display an in‑figure summary (mean difference / mean log2FC, t, p, N) for the full and the filtered sets.</li>
+  </ul>
+</div>
+
+<h2>Grouping</h2>
+<div class="box">
+  <p>Plots are generated for:</p>
+  <ul>
+    <li><strong>All</strong></li>
+    <li>Each <strong>Ontology</strong> category present in your data (e.g., PC, PE, TG, CL, SM, …)</li>
+    <li>Available <strong>High‑order</strong> flags, if present (e.g., <code>glycerolipids</code>, <code>Ethers</code>, <code>lysos</code>, <code>sphingolipids</code>, <code>Standards</code>, <code>neutral_lipids</code>, …)</li>
+  </ul>
+  <p class="hint">Ontology colors/markers are assigned consistently across panels for visual coherence.</p>
+</div>
+
+<h2>Outputs</h2>
+<div class="box">
+  <ul>
+    <li><strong>Plots</strong> (SVG) under <code>Analysis/&hellip;/plot_outputs/&lt;Group&gt;/</code> for all enabled panels.</li>
+    <li><strong>Paired‑t statistics summary</strong>: <code>paired_ttest_statistics.csv</code>.</li>
+    <li><strong>Per‑comparison summary tables</strong> (if any group has p ≤ 0.05):
+      <ul>
+        <li><code>&lt;Comparison&gt;_Ontology.csv</code> — rows are ontology groups with at least one significant metric.</li>
+        <li><code>&lt;Comparison&gt;_HighOrder_All.csv</code> — rows are <em>All</em> and high‑order groups with at least one significant metric.</li>
+      </ul>
+    </li>
+    <li><strong>Filtered statistics</strong> (α = 0.05 and N ≥ 10): <code>statistics_alpha0_05_minN10.csv</code>.</li>
+    <li><strong>Final merged dataframe</strong> for all experiments: <code>final_dataframe.csv</code>.</li>
+    <li><strong>Datapoints for boxplots</strong> (cleaned): <code>datapoints_for_boxplot.csv</code>, plus rendered <code>boxplot_*.png</code> by metric and filtered/unfiltered state.</li>
+  </ul>
+</div>
+
+<h2>Tips</h2>
+<div class="box">
+  <ul>
+    <li>Use <em>Settings → Normalization</em> to set a single method; if choosing <em>Standards</em>, double‑check the baseline label.</li>
+    <li>Start with <em>Volcano: Abundance</em> to quickly triage large shifts, then use <em>Conformity</em> and <em>Homeostasis</em> to diagnose balance between abundance and rate.</li>
+    <li>Save your GUI configuration to YAML to rerun exactly the same analysis later.</li>
+  </ul>
+</div>
+
+<!-- GUI launcher (optional, Windows) -->
+<a href="run:Lipidomics_post_hoc_analysis1.2/main.cmd" data-label="Analyze Wide Dataframe">
+  <div class="hidden-run">Launch Post‑hoc Analysis</div>
+</a>
+<p class="hint">
+  If <code>Lipidomics_post_hoc_analysis1.2/main.cmd</code> (or similar) exists in your working directory,
+  the “Analyze Wide Dataframe” button will appear and execute it. On macOS/Linux, run the Python entry point directly.
+</p>
+
+</body>
+</html>

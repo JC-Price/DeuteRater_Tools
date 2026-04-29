@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Merge Rates & Fraction‑New — Wide Metabolic Table (Assembly Step)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 { color: #126782; font-size: 1.9rem; margin-bottom: 16px; }
+    h2 { color: #1f618d; margin-top: 24px; margin-bottom: 8px; }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    em { color: #444; }
+    .hint { color: #666; font-size: 0.9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+  </style>
+</head>
+<body>
+<h1>Merge Rates & Fraction‑New into a Wide Metabolic Table (Assembly Step)</h1>
+
+<div class="box">
+  <h2>Purpose in the workflow</h2>
+  <p>
+    This step <strong>assembles</strong> the core kinetic outputs and identifiers into a single master table that the
+    downstream notebooks and plotting scripts use for statistics and visualization.
+    Concretely, it merges <em>Fraction‑New</em> and <em>Rates</em> outputs from <strong>DeuteRater</strong> with the
+    polarity‑aware <em>Concatenated ID</em> table from earlier steps (MS‑DIAL → IsobarHandler → standardization).
+  </p>
+  <p>
+    The result (<code>merged_results.csv</code>) is a consolidated, mostly wide-format dataframe that contains:
+    (i) per‑group Fraction‑New metrics (pivoted), (ii) per‑group Rates metrics (pivoted where possible),
+    (iii) one abundance column per mzML file derived from DeuteRater, and (iv) IDs/metadata carried forward for
+    accurate linking and filtering. Subsequent steps (outside this script) perform summary statistics,
+    multiple testing corrections, and figure generation.
+  </p>
+</div>
+
+<div class="box">
+  <h2>What this script actually does</h2>
+  <p>
+    The helper automates three inputs → one output, with robust joins and reshaping:
+  </p>
+  <ol>
+    <li><strong>Prompts for group codes</strong> (comma‑separated; used to form wide columns for group‑specific metrics).</li>
+    <li><strong>Loads three tables</strong>:
+      <ul>
+        <li><em>Fraction‑New</em> (TSV/CSV/Excel)</li>
+        <li><em>Rates</em> (TSV/CSV/Excel)</li>
+        <li><em>Concatenated ID file</em> (CSV/TSV/Excel) assembled from POS/NEG concatenation</li>
+      </ul>
+    </li>
+    <li><strong>Builds DeuteRater abundance‑per‑file columns</strong> from <code>abundances</code> +
+        <code>mzml_path</code>, producing one column per mzML like
+        <code>Abundance_{FILENAME}_DR</code>.</li>
+    <li><strong>Fraction‑New long→wide pivot</strong>:
+      <ul>
+        <li>Melts selected FN metrics (e.g., <code>n_value</code>, <code>BA_rate</code>, <code>BA_Asyn</code>,
+            <code>n_value_SE</code>, bootstrap diagnostic fields, etc.) by <em>sample_group</em>.</li>
+        <li>Rebuilds a wide table with columns suffixed by group (e.g., <code>BA_rate_A2</code>), while keeping
+            <code>null_bootstrap_*</code> fields unsuffixed.</li>
+        <li>Re‑attaches identifier/formula columns and DR abundance columns where present.</li>
+      </ul>
+    </li>
+    <li><strong>Rates wide pivot (if available)</strong>:
+      <ul>
+        <li>Pivots selected numeric (and selected list‑like) rate fields by group when
+            <code>group_name</code> is present.</li>
+        <li>Falls back to the raw Rates table if a pivot is not possible.</li>
+      </ul>
+    </li>
+    <li><strong>Merges</strong> (outer/left as appropriate) to produce the master table:
+      <ul>
+        <li><em>Fraction‑New ↔ Rates</em> by <strong>Lipid Unique Identifier</strong> (FN) ↔ <strong>analyte_id</strong> (Rates).</li>
+        <li>Then <em>Fraction‑New ↔ Concatenated IDs</em> by <strong>Alignment ID</strong>.</li>
+      </ul>
+    </li>
+    <li><strong>Canonicalizes overlapping columns</strong> introduced by merges:
+      <ul>
+        <li>Prefers and renames <code>Lipid Unique Identifier_x → Lipid Unique Identifier</code>; drops the <code>_y</code> variant.</li>
+        <li>Same for <code>Formula</code> and <code>nH</code> (prefers <code>_x</code> where both exist).</li>
+        <li>Safely drops other merge‑created <code>_x/_y</code> columns while protecting true data columns like
+            <code>rate_graph_time_points_x</code> and <code>normed_isotope_data_y</code>.</li>
+      </ul>
+    </li>
+    <li><strong>Ensures <code>nH</code> is present</strong>; if missing, derives it from <code>Adduct_cf</code> hydrogen count.</li>
+    <li><strong>Writes</strong> the output as <code>merged_results.csv</code> in the Fraction‑New file’s directory.</li>
+  </ol>
+  <p class="hint">
+    This script does <em>not</em> compute medians, RSD, BH‑FDR, or new confidence intervals. Those statistics are
+    performed in downstream analysis notebooks/tools that consume <code>merged_results.csv</code>.
+  </p>
+</div>
+
+<div class="box">
+  <h2>Inputs</h2>
+  <ul>
+    <li><strong>Fraction‑New</strong> table (TSV/CSV/Excel) with columns including:
+      <ul>
+        <li><code>Lipid Unique Identifier</code>, <code>Alignment ID</code>, <code>sample_group</code>, and metric columns such as
+            <code>n_value</code>, <code>BA_rate</code>, <code>BA_Asyn</code>, <code>n_value_SE</code>, and
+            diagnostic bootstrap fields where present.</li>
+        <li><code>mzml_path</code> and <code>abundances</code> (for per‑file DR abundance columns; if absent, those columns are skipped).</li>
+      </ul>
+    </li>
+    <li><strong>Rates</strong> table (TSV/CSV/Excel) with:
+      <ul>
+        <li><code>analyte_id</code> (joins to FN’s <em>Lipid Unique Identifier</em>), optional <code>group_name</code> for pivoting, and numerical/list fields the script carries through.</li>
+      </ul>
+    </li>
+    <li><strong>Concatenated ID</strong> file (CSV/TSV/Excel) with:
+      <ul>
+        <li><code>Alignment ID</code> (joins back to FN), and identifiers like <code>Lipid Unique Identifier</code>,
+            <code>Formula</code>, <code>Adduct_cf</code>, etc., carried from earlier steps.</li>
+      </ul>
+    </li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>merged_results.csv</strong> — a consolidated table that:
+      <ul>
+        <li>Contains per‑group, pivoted Fraction‑New metrics and (where possible) per‑group Rates metrics.</li>
+        <li>Includes one DeuteRater abundance column per mzML file: <code>Abundance_{FILENAME}_DR</code>.</li>
+        <li>Is keyed by Alignment ID and includes canonicalized identifiers and metadata for downstream stats & plotting.</li>
+      </ul>
+    </li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>How to run</h2>
+  <ol>
+    <li>When prompted, enter your <strong>experiment/group codes</strong>, e.g., <code>A2,A3,A4</code>.</li>
+    <li>Select your <strong>Fraction‑New</strong> table.</li>
+    <li>Select your <strong>Rates</strong> table.</li>
+    <li>Select your <strong>Concatenated ID</strong> file.</li>
+    <li>Wait for confirmation; the script writes <code>merged_results.csv</code> next to the Fraction‑New file.</li>
+  </ol>
+</div>
+
+<!-- Optional Windows launcher for convenience -->
+<a href="run:Generating_wide_dataframe\Generating_wide_dataframe.cmd" data-label="Create Wide Dataframe">
+  <div class="hidden-run">Merge Rates & Fraction‑New</div>
+</a>
+<p class="hint">
+  If <code>Generating_wide_dataframe\Generating_wide_dataframe.cmd</code> exists in the working directory, the
+  “Create Wide Dataframe” button will appear and execute it (Windows-only). On macOS/Linux, run the Python script directly.
+</p>
+
+</body>
+</html>

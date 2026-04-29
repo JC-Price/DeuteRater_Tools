@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lipidomic Kinetics — nL Component Deconvolution</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+           padding: 24px; background: #f4f8fb; color: #222; line-height: 1.6; max-width: 980px; margin: auto; }
+    h1 { color: #126782; font-size: 1.9rem; margin-bottom: 16px; }
+    h2 { color: #1f618d; margin-top: 24px; margin-bottom: 8px; }
+    h3 { color: #333; margin-top: 16px; margin-bottom: 6px; font-size: 1.1rem; }
+    .box { background: #fff; border-left: 6px solid #126782; box-shadow: 0 2px 6px rgba(0,0,0,.08);
+           padding: 18px 22px; margin: 18px 0; border-radius: 8px; }
+    code { background: #eef3f7; padding: 2px 5px; border-radius: 4px; font-size: .95rem; }
+    pre  { background: #eef3f7; padding: 10px 14px; border-radius: 8px; overflow-x: auto; }
+    .hint { color: #666; font-size: .9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+    ul { margin-left: 20px; }
+    figure { margin: 14px 0; }
+    figcaption { color: #555; font-size: .9rem; margin-top: 6px; }
+    img.proof { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+<h1>Lipidomic Kinetics — n<sub>L</sub> Component Deconvolution</h1>
+
+<div class="box">
+  <h2>Purpose</h2>
+  <p>
+    This module decomposes lipid-level n‑value measurements into <em>component‑level</em> contributions
+    (fatty acids, headgroup, glycerol). It builds a design matrix from parsed lipid structures and
+    uses Monte‑Carlo ridge regression to estimate per‑component n<sub>L</sub>, enabling comparisons
+    across genotypes or conditions and optional overlay with literature values.   </p>
+</div>
+
+<div class="box">
+  <h2>Required input (tidy CSV)</h2>
+  <p>The script expects these columns (names are normalized on load):</p>
+  <ul>
+    <li><code>Alignment ID</code> (renamed internally to <code>Sequence</code>)</li>
+    <li><code>Ontology</code> (lipid class)</li>
+    <li><code>metric</code> (e.g., <code>n_value</code>, <code>k</code>, <code>asyn</code>)</li>
+    <li><code>value</code> (numeric)</li>
+    <li><code>se</code> (standard error; must be present and &gt; 0)</li>
+    <li><code>genotype</code> (renamed to <code>group_name</code>)</li>
+  </ul>
+  <p class="hint">Rows with missing/≤0 <code>se</code> are dropped. Column renames and checks occur at start-up. </p>
+</div>
+
+<div class="box">
+  <h2>Interactive settings (GUI)</h2>
+  <p>When launched, a small dialog gathers QC and display parameters:</p>
+  <ul>
+    <li><strong>SE ranges</strong> for <code>k</code>, <code>Asyn</code>, <code>n</code> (lower/upper). Lipid×group entries must fall within these per‑metric SE bounds to pass QC.</li>
+    <li><strong>Component min %</strong> (informational): a rare threshold prompt is shown, but the model currently uses a fixed 5% prevalence filter (see below). </li>
+    <li><strong>Monte‑Carlo iterations</strong> per genotype (default shown in the dialog). </li>
+    <li><strong>Only show common components</strong> (intersection across groups in barplots).</li>
+    <li><strong>Treat 0:0 as a component?</strong> (pads DG/TG when needed; toggles inclusion of the <code>0:0</code> token in modeling/plots).</li>
+    <li><strong>Include ether species?</strong> (O-/P-; enables <code>Ether*</code> ontologies in parsing). </li>
+    <li><strong>Literature component reference values</strong> — optional “<code>FA = value</code>” lines rendered as gray backdrop bars in component plots. </li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Parsing & eligibility</h2>
+  <p>Lipid rows are kept only if they can be parsed into components:</p>
+  <ul>
+    <li><strong>Supported classes</strong> by default: PE, PC, PI, PS, PG, PA, DG, TG, LPE, LPC, LPA, LPG, LPI, LPS
+        (plus their <code>Ether*</code> variants if enabled). </li>
+    <li><strong>Species requirement</strong>: for main diacyl classes (PC/PE/PI/PS/PG/PA and DG), a species‑level ID must be present (e.g., contains a newline then “16:0/18:1”, etc.); otherwise the row is skipped. </li>
+    <li><strong>FA extraction</strong>: recognizes tokens like <code>16:0</code>, <code>18:1</code>, pads to the expected count when needed (e.g., DG→3, lyso→2), and appends structural parts (Glycerol, Choline, etc.) per ontology. </li>
+    <li>By default <strong>ethers are excluded</strong>; check “Include ether species?” to keep them. </li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Quality control & data selection</h2>
+  <ol>
+    <li><strong>SE gates</strong>: for each lipid×group, take the max SE per metric and require
+        <code>k_SE ∈ [k_low, k_high]</code>, <code>Asyn_SE ∈ [A_low, A_high]</code> (ignored if all Asyn SE=0),
+        and <code>n_SE ∈ [n_low, n_high]</code>. Non‑passing entries are excluded from modeling. </li>
+    <li><strong>nL filter</strong>: keeps only <code>n_value &gt; 10</code> before modeling. </li>
+    <li><strong>Rare components</strong>: components present in &lt; <code>5%</code> of lipids are dropped,
+        and any lipids containing them are removed from the current genotype’s system. (The 5% threshold is fixed in the code.)</li>
+  </ol>
+</div>
+
+<div class="box">
+  <h2>Model & estimation</h2>
+  <p>For each genotype:</p>
+  <ul>
+    <li>Build a 0/1/<em>count</em> design matrix <code>A</code> (lipids × components) from parsed components. </li>
+    <li>Use Monte‑Carlo sampling of observations via <code>N(median, SE)</code> (truncated if configured), then solve
+        <em>unconstrained</em> ridge least‑squares for each draw (L2‑regularized). </li>
+    <li>Aggregate draws into per‑component <strong>Median</strong>, <strong>2.5%</strong>, and <strong>97.5%</strong> percentiles. </li>
+    <li>Optionally compute fit R² against the per‑lipid nL medians for diagnostics.</li>
+  </ul>
+  <p class="hint">This implementation uses MC ridge (allows negative coefficients); it does <em>not</em> use non‑negative or bounded solvers.</p>
+</div>
+
+<div class="box">
+  <h2>Outputs</h2>
+  <p>All outputs are written to a timestamped folder next to your input, for example:
+     <code>lipid_deconv_out_{basename}_{YYYYMMDD-HHMMSS}/</code>.</p>
+  <ul>
+    <li><strong>Decision matrices</strong>: per‑genotype CSV containing A and matched rows (<code>Ontology</code>, <code>Sequence</code>, <code>n_value</code>, <code>n_val_se</code>). </li>
+    <li><strong>Component summaries</strong>: per‑genotype CSV with <code>Median</code>, <code>Lower</code>, <code>Upper</code> per component; plus a combined summary table. </li>
+    <li><strong>Bar plots</strong> (FA‑ordered): multi‑group bars with 95% CI whiskers; optional gray literature bars (full cluster width). Common‑component intersection can be enforced.</li>
+    <li><strong>QC summaries & reasons</strong>: text/CSV files logging SE stats and parsing/eligibility drop counts. </li>
+    <li><strong>Exported settings</strong>: all GUI inputs and literature entries saved for provenance.</li>
+  </ul>
+</div>
+
+<!-- NEW SECTION -->
+<div class="box">
+  <h2>Verification</h2>
+  <p>
+    To verify the correctness of the deconvolution logic (parsing → design matrix → Monte‑Carlo estimation),
+    we replicated the workflow on <strong>peptides</strong>, where the true component stoichiometry (amino acids)
+    is exactly known. Across the peptide benchmark, the method achieved an average deviation of
+    <strong>~0.5 per amino acid</strong> from ground‑truth composition—a strong check that the parsing,
+    matrix assembly, and estimation steps recover known building blocks with high fidelity.
+  </p>
+
+  <figure>
+    <img class="proof" src="images/peptide_bar_plot.png" alt="Peptide validation bar plot">
+    <figcaption>
+      <strong>Peptide validation.</strong> Component‑level (amino acid) estimates versus literature-accepted values,
+      demonstrating ~0.5 average deviation per amino acid across the benchmark set.
+    </figcaption>
+  </figure>
+
+  <p class="hint">
+    Because the lipid workflow reuses the same parsing, eligibility, design‑matrix construction,
+    and Monte‑Carlo regression machinery documented above, the peptide results provide a practical,
+    independent validation of this implementation end‑to‑end.   </p>
+</div>
+
+<!-- Optional Windows launcher -->
+run:Lipidomics_component_analysis/main.cmd
+  <div class="hidden-run">Run n<sub>L</sub> Component Deconvolution</div>
+</a>
+<p class="hint">
+  If <code>Lipidomics_component_analysis\main.cmd</code> exists in your working directory, a “Run nL Component Deconvolution” button will appear and execute it. On macOS/Linux, run the Python file directly.
+</p>
+
+</body>
+</html>

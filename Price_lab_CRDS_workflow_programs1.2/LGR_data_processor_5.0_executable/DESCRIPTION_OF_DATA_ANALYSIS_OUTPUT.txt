@@ -1,0 +1,22 @@
+Asymptote calculation graphs
+- These graphs show the exponential approach of each injection-measurement cycle (8 per sample) towards the true 
+deuterium enrichment. The "true enrichment" is calculated by matching the values to an exponential fit with an
+asymptote. The asymptote is the "true enrichment". When the injection-measurement cycle curve fails to fit an 
+exponential fit (usually due to there being a very small measurement range), the "true enrichment" is given by 
+the average of the final three measurements.
+
+_plot.png
+-This plot shows the deuterium enrichment for each time point.
+
+final_samples_ouput.csv
+-Shows the deuterium enrichment and standard deviations for each time point
+
+final_standards_output.csv
+-Same information but for the standard curve samples
+
+Standard_Curve_plot.png
+-Shows the quality of the standard curve used to measure the samples enrichment values
+
+tech_reps_df.csv
+-An intermediate data frame used in the enrichment value calculations. Shows similar information as found in the 
+"Asymptote calculation graphs folder. 

@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lipidomic Kinetics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+
+    code2 {
+      background: #ffe5e5;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    em {
+      color: #444;
+    }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Welcome to Kinetic Lipidomics</h1>
+<div class="box">
+  <p>Welcome to <strong>Kinetic Lipidomics</strong> — a framework designed to enable kinetic mass spectrometry analysis of lipid turnover across the lipidome. This program mirrors the workflow described in <em>Nielsen et&nbsp;al.,&nbsp;2026</em>, allowing users to reproduce our analyses with our published raw data {add link for our raw data}, or carry out new kinetic studies on their own datasets.</p>
+
+  <p>The core concept of this workflow is: 
+<ul>
+  <li>Monitoring the replacement of protium (<sup>1</sup>H) by deuterium (<sup>2</sup>H) in lipid molecules over time to quantify molecular replacement <em>in vivo</em>.</li>
+</ul>
+
+<p>This approach assumes: <ul><li>That you, your lab, or your collaborators have performed an isotope labeling time-course across multiple biological subjects, or have access to data of that form. In <em>Nielsen et&nbsp;al.,&nbsp;2026</em>, each experiment included six time points (0, 0.25, 1, 4, 16, and 32 days), with three biological replicates at the earliest and latest time points, and two replicates at each intermediate point. We recommend adopting a similar design for followers of this workflow.</p></ul></li>
+
+<!-- Add image reference -->
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Mouse_time_course.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            Creating the isotope labeling time-course
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+
+
+
+
+The <strong>first step</strong> is the preparation of raw mass spectrometry data for downstream kinetic analysis.
+
+
+  <p>All raw instrument files must first be converted into the standardized <code>.mzML</code> format for compatibility with <strong>Isobar Handler</strong> and <strong>DeuteRater</strong>. We recommend using <strong>ProteoWizard’s MSConvert</strong> tool for this conversion, available at:</p>
+  <p><em>https://proteowizard.sourceforge.io/</em></p>
+
+  <p>After installing ProteoWizard, locate the folder containing <code>msconvert.exe</code> (for example: <code>C:\Program Files\ProteoWizard\ProteoWizard 3.0.23137.ff55254</code>). We recommend enabling <strong>vendor peak picking</strong> during conversion, as this produces centroided spectra and accelerates later analysis steps.</p>
+
+  <p>Although MSConvert can be operated through its GUI or command line, we standardize its usage via an automated helper tool to ensure reproducibility. Click the <strong>"Generate MSConvert Batch Command"</strong> button below to launch a small GUI that allows you to:</p>
+
+  <ul>
+    <li>Select the path to <code>msconvert.exe</code></li>
+    <li>Specify your operating system</li>
+    <li>Toggle vendor peak picking</li>
+  </ul>
+
+  <p>Click <em>Generate</em> to produce a ready-to-run command. Copy this command to your clipboard and paste it into your system’s terminal. Navigate to the directory containing your raw mass spec files using <code>cd</code> (for example: <code>cd "C:\Users\MyPC\Documents\MS_files"</code>) and run the command. A new folder will automatically be created containing your converted <code>.mzML</code> files.</p>
+
+  <p>For advanced users, additional conversion options and parameters are described here:</p>
+  <p><em>https://proteowizard.sourceforge.io/tools/msconvert.html</em></p>
+</div>
+
+<a href="run:msconvert_helper/msconvert_helper.cmd" data-label="Generate MSConvert Batch Command">
+  <div class="hidden-run">Generate MSConvert Batch Command</div>
+</a>
+
+<p class="hint">If "msconvert_helper/msconvert_helper.cmd (or ish)" exists in the working directory, the "Generate MSConvert Batch Command" button will execute it.</p>
+
+</body>
+</html>

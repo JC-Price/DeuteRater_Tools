@@ -1,0 +1,11 @@
+prefix=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library 
+exec_prefix=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library 
+libdir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/lib 
+includedir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/include 
+modules=0 
+Name: libXML 
+Version: 2.13.9 
+Description: libXML library version2. 
+Requires: 
+Libs: -L//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/lib -lxml2 -liconv -lz 
+Cflags: -I//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/include/libxml2 -I//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/include 

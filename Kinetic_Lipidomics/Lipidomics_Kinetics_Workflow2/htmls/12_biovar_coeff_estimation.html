@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lipidomic Kinetics — Regression Analysis</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+      max-width: 980px;
+      margin: auto;
+    }
+    h1 { color: #126782; font-size: 1.9rem; margin-bottom: 16px; }
+    h2 { color: #1f618d; margin-top: 24px; margin-bottom: 8px; }
+    .box {
+      background: #fff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code { background: #eef3f7; padding: 2px 5px; border-radius: 4px; font-size: .95rem; }
+    pre  { background: #eef3f7; padding: 10px 14px; border-radius: 8px; overflow-x: auto; }
+    .hint { color: #666; font-size: .9rem; margin-top: 6px; }
+    .hidden-run { display: none; }
+    ul { margin-left: 20px; }
+  </style>
+</head>
+<body>
+
+<h1>Lipidomic Kinetics — Comparative Regression Analysis</h1>
+
+<div class="box">
+  <h2>Purpose</h2>
+  <p>
+    This module performs <strong>per‑metric linear modeling</strong> on your tidy dataset in order to quantify
+    associations between lipid metrics (e.g., Abundance, Rate, Asymptote) and experimental covariates
+    (e.g., genotype, sex, treatment). For each metric, it fits an OLS model with explicit <em>effects (Sum) coding</em>
+    and an intercept representing the grand mean, then exports coefficient tables, ANOVA, and diagnostic
+    forest plots.
+  </p>
+</div>
+
+<div class="box">
+  <h2>How it runs (interactive)</h2>
+  <ol>
+    <li><strong>Choose a confidence interval</strong> in a small dialog (90%, 95%, 99%, or custom). The CI level is applied to coefficient intervals and plot annotations.</li>
+    <li><strong>Select a tidy CSV</strong> that contains at least <code>metric</code> and <code>value</code> (plus your predictors). Results are written to a uniquely named output folder next to the CSV.</li>
+    <li><strong>Run scope</strong>: models are run once on <em>all rows</em> and, if an <code>Ontology</code> column exists, again for each ontology value in its own subfolder.</li>
+  </ol>
+  <p class="hint">Predictor types are normalized automatically: objects convertible to numeric become numeric; otherwise they are treated as categorical. Predictors with no variation inside a metric subset are dropped before fitting.</p>
+</div>
+
+<div class="box">
+  <h2>Model specification</h2>
+  <ul>
+    <li><strong>Formula</strong>: <code>value ~ 1 + C(cat, Sum) + numeric</code> per metric, where <code>1</code> is the intercept (grand mean) and <code>C(cat, Sum)</code> gives effects (Sum) coding. Numeric predictors are added when they vary within the subset.</li>
+    <li><strong>Estimation</strong>: OLS via <code>statsmodels</code>, plus an optional HC3 <em>robust covariance</em> variant; both summaries can be written.</li>
+    <li><strong>ANOVA</strong>: Type‑II ANOVA (based on the OLS fit) is exported for each metric.</li>
+  </ul>
+  <pre><code># Example (auto-generated)
+value ~ 1 + C(genotype, Sum) + sex + age
+</code></pre>
+  <p class="hint">Columns intentionally excluded from modeling include: <code>Alignment ID</code>, <code>metric</code>, <code>value</code>, <code>sample_id</code>, <code>ci_lower</code>, <code>ci_upper</code>, <code>Ontology</code>, and <code>se</code>. You can still run per‑Ontology analyses via the automatic split, but <code>Ontology</code> itself is never used as a predictor.</p>
+</div>
+
+<div class="box">
+  <h2>Diagnostics & visualization</h2>
+  <ul>
+    <li><strong>Forest plots</strong> with the chosen CI: points for non‑intercept terms only, a vertical reference at 0, and a numbered key mapping points back to readable term labels.</li>
+    <li><strong>Implied level reconstruction</strong> for Sum‑coded categoricals: if a factor has <em>k</em> levels, the (k‑1) reported coefficients are augmented with a computed “missing” level (negative sum of shown levels), including SE and CI—so every level appears in the plot/key.</li>
+    <li><strong>Readable equation</strong> is printed at the top in monospaced text; an <strong>intercept value&nbsp;±&nbsp;CI</strong> (or [L,U]) appears near the bottom alongside the list of categorical predictors included in the model.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Outputs</h2>
+  <ul>
+    <li><strong>OLS summary</strong> per metric (<code>_ols_summary.txt</code>); optional <strong>HC3 summary</strong> (<code>_robust_summary.txt</code>).</li>
+    <li><strong>ANOVA</strong> Type‑II table (<code>_anova.csv</code>).</li>
+    <li><strong>Coefficient forest plot</strong> PNG (<code>_coeff_forest.png</code>) with numbered key, implied level(s), and a human‑readable equation.</li>
+    <li><strong>Error log</strong> (<code>_errors.txt</code>) if any metrics fail checks, have too few rows, or run into fitting issues.</li>
+    <li><strong>Scope</strong>: one set under all rows, and one set per ontology value if the column exists.</li>
+  </ul>
+</div>
+
+<div class="box">
+  <h2>Minimum data & guardrails</h2>
+  <ul>
+    <li>A metric subset must retain a minimal number of rows after NA‑drop; otherwise it’s skipped with a note in the errors file.</li>
+    <li>Predictors that are constant within a metric subset are removed automatically prior to fitting (prevents singular designs).</li>
+  </ul>
+</div>
+
+run:Regression_analysis\Regression_analysis.cmd
+  <div class="hidden-run">Run Comparative Regression Analysis</div>
+</a>
+<p class="hint">
+  If Regression_analysis\Regression_analysis.cmd (or ish) exists in the working directory, the “Run Regression Analysis” button will appear and execute it.
+</p>
+
+</body>
+</html>

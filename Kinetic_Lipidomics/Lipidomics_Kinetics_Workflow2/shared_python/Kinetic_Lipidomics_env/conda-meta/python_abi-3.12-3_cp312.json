@@ -1,0 +1,31 @@
+{
+ "build": "3_cp312",
+ "build_number": 3,
+ "channel": "https://repo.anaconda.com/pkgs/main/win-64",
+ "constrains": [
+  "python 3.12.*"
+ ],
+ "depends": [],
+ "extracted_package_dir": "",
+ "files": [],
+ "fn": "python_abi-3.12-3_cp312.conda",
+ "license": "BSD-3-Clause",
+ "link": {
+  "source": "",
+  "type": 1
+ },
+ "md5": "d5e653c77570e128ab12014cfe33d604",
+ "name": "python_abi",
+ "package_tarball_full_path": "",
+ "paths_data": {
+  "paths": [],
+  "paths_version": 1
+ },
+ "requested_spec": "None",
+ "sha256": "a49f0b7761cce125f7c42b763c65eea6db94239d912f6efc512bf04ae0c4f0b9",
+ "size": 6155,
+ "subdir": "win-64",
+ "timestamp": 1764349788000,
+ "url": "https://repo.anaconda.com/pkgs/main/win-64/python_abi-3.12-3_cp312.conda",
+ "version": "3.12"
+}

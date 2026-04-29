@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Preparing Guidefile for Isobar Handler / DeuteRater</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      padding: 24px;
+      background: #f4f8fb;
+      color: #222;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #126782;
+      font-size: 1.9rem;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #1f618d;
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    .box {
+      background: #ffffff;
+      border-left: 6px solid #126782;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      padding: 18px 22px;
+      margin: 18px 0;
+      border-radius: 8px;
+    }
+    code {
+      background: #eef3f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+    em {
+      color: #444;
+    }
+    .hint {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+    .hidden-run {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Preparing the Guidefile for Isobar Handler / DeuteRater</h1>
+
+<div class="box">
+  <p>With your <code>.mzML</code> files prepared, the next step is to identify lipid species and estimate their approximate retention times. This information will guide downstream kinetic analysis using <strong>Isobar Handler</strong> and <strong>DeuteRater</strong>. For this purpose, we use <strong>MS-DIAL</strong>, a free and widely adopted platform for untargeted lipidomics, metabolomics and proteomics.</p>
+
+  <p>The latest version of MS-DIAL can be downloaded from:</p>
+  <p><em>https://systemsomicslab.github.io/compms/msdial/main.html</em></p>
+
+  <h2>Feature Detection and Alignment in MS-DIAL</h2>
+  <p><strong>MS-DIAL</strong> includes the <em>LipidBlast</em> database and performs both feature detection and lipid identification using MS² spectra. It provides initial estimates of lipid retention times (RTs) and intensities, which we later refine using a <strong>Legendre Polynomial Morph</strong> (see next step: <em>Isobar Handler</em>) to achieve precise RT alignment across all <code>.mzML</code> files.</p>
+
+<p>Begin by identifying a subset of <strong>MS² files</strong> (we recommend pooled-quality controls) of the same biological subject type and chromatographic method that exhibit the most consistent retention time alignment. This can be evaluated using your vendor’s mass spectrometry software (e.g., <em>Agilent Qualitative Analysis</em>, <em>Thermo Fisher Scientific FreeStyle</em>, etc.), where you can visually confirm chromatographic overlap across runs. Once verified, load these MS² and reference MS¹ files into <strong>MS-DIAL</strong>. We recommend using the default parameters except for the <strong>Retention Time Tolerance</strong>, which should reflect your instrument’s reproducibility. A tolerance of <strong>15–30 seconds</strong> is a good starting point.</p>
+<p class="hint">Note: Make sure to do this per polarity- the chromatography features will differ greatly between positive and negative mode analysis. </p>
+
+
+  <p>For adduct detection, we recommend the following settings:</p>
+  <ul>
+    <li><strong>Positive mode:</strong> <code>[M+H]+</code>, <code>[M+NH4]+</code>, <code>[M+Na]+</code>, <code>[M+H–H2O]+</code></li>
+    <li><strong>Negative mode:</strong> <code>[M–H]–</code>, <code>[M–H–H2O]–</code></li>
+  </ul>
+
+  <p>After alignment, normalize intensities by <strong>mTIC</strong> and export two CSV files:
+    <ol>
+      <li><em>Raw Data (Height)</em> – containing intensity values</li>
+      <li><em>Retention Times</em> – containing per-lipid RTs</li>
+    </ol>
+    Be sure to export without trimming rows and in the .csv format.
+  </p>
+
+  <h2>Preparing the Data for Isobar Handler / DeuteRater</h2>
+  <p>The MS-DIAL output must be reformatted before use in our kinetic workflow. The Price Lab uses standardized column conventions and combines retention time and intensity data into a unified <em>guidefile</em> that ensures compatibility with both Isobar Handler and DeuteRater.</p>
+
+  <p>If your retention times are already highly reproducible across samples, you may proceed directly to DeuteRater. However, <strong>Isobar Handler</strong> has the potential to significantly enhance retention-time precision and improve the accuracy of kinetic parameter estimation. See the figure below.</p>
+
+<figure style="text-align:center; max-width:600px; margin: 0 auto;">
+  <img src="images/Effect_of_Legendre_correction.png" 
+       alt="Mouse isotopic labeling time-course" 
+       style="width:80%; height:auto; border:1px solid #ccc; border-radius:4px;">
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+  <figcaption style="font-size:0.9rem; color:#555; margin:4px 0; font-style:italic;">
+            <strong>Improvement of unlabeled isotope distributions with polynomial-corrected retention times:</strong>   
+
+(A,B) Example extracted ion chromatrograms demonstrating using a single reference retention time (A) versus MS-file-specific retention times (B). (C,D) Scatterplots of experimental versus theoretical isotopic abundances from unlabeled samples, where theoretical values were calculated from the natural abundance of heavy isotopes. Using a single reference retention time led to systematic overestimation of the lightest isotope peak (M0) and underestimation of the isotope peak with 2 extra neutrons (M2), yielding a higher average standard deviation (C, 0.05, n = 1,463). Polynomial-aligned retention times reduced the standard deviation (0.02, n = 3480) and substantially increased the number of lipids passing DeuteRater’s isotope-envelope quality filters (D). 
+  </figcaption>
+  <hr style="border:0; border-top:1px solid #ccc; width:100%; margin:8px auto;">
+</figure>
+
+  <p>We provide a GUI-based helper tool to automate guidefile preparation. Click the button below to launch it and generate a properly formatted dataset for downstream analysis.</p>
+</div>
+
+<a href="run:MS_dial_to_Isobar_Handler/MS_dial_to_Isobar_Handler.cmd" data-label="Prepare Data for IH/DR">
+  <div class="hidden-run">Prepare Data for IH/DR</div>
+</a>
+
+<p class="hint">If MS_dial_to_Isobar_Handler.cmd (or ish) exists in the working directory, the “Prepare Data for IH/DR” button will appear below and execute it.</p>
+
+</body>
+</html>

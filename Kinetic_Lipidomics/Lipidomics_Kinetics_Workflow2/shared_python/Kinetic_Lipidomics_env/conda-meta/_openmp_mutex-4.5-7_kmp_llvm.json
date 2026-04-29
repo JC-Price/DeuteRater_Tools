@@ -1,0 +1,31 @@
+{
+ "build": "7_kmp_llvm",
+ "build_number": 7,
+ "channel": "https://conda.anaconda.org/conda-forge/win-64",
+ "constrains": [],
+ "depends": [
+  "llvm-openmp >=9.0.1"
+ ],
+ "extracted_package_dir": "",
+ "files": [],
+ "fn": "_openmp_mutex-4.5-7_kmp_llvm.conda",
+ "license": "BSD-3-Clause",
+ "link": {
+  "source": "",
+  "type": 1
+ },
+ "md5": "835afb60881cf738bc489342f898b069",
+ "name": "_openmp_mutex",
+ "package_tarball_full_path": "",
+ "paths_data": {
+  "paths": [],
+  "paths_version": 1
+ },
+ "requested_spec": "None",
+ "sha256": "c7732f32f98473411f1b972edd18142a01da2451e0a40eac3a28cd334afa67ad",
+ "size": 8536,
+ "subdir": "win-64",
+ "timestamp": 1764092422000,
+ "url": "https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-7_kmp_llvm.conda",
+ "version": "4.5"
+}
