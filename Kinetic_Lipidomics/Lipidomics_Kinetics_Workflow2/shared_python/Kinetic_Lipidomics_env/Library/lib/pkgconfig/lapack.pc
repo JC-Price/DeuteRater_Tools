@@ -1,9 +1,0 @@
-libdir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/lib
-includedir=//?/D:/Kinetic_Lipidomics/Lipidomics_Kinetics_Workflow2/shared_python/Kinetic_Lipidomics_env/Library/include
-
-Name: LAPACK
-Description: FORTRAN reference implementation of LAPACK Linear Algebra PACKage
-Version: 3.9.0
-URL: http://www.netlib.org/lapack/
-Libs: -L${libdir} -llapack
-Requires.private: blas
