@@ -1,0 +1,404 @@
+# -*- coding: utf-8 -*-
+"""
+Spyder Editor
+
+This is a temporary script file.
+"""
+# For this to work, you will need a psm and protein file from fragpipe outputs. These come from the 
+# experiment files from fragpipe (When setting up Fragpipe, enter all samples with the same experiment name)
+# This code is designed to create an ID file in preparation of running DeuteRater. It is 
+# Currently set up to create a peptide ID file from tissue, but can be manually changed for culture study types.
+# DeuteRater resource files 'aa_labeling_sites.tsv' and 'aa_elem_compositions.tsv' are needed for some 
+# column calculations. Some of this code was copied and adapted from DeuteRater code files:
+#        NValueCalculator.py, theory_preparer.py, and peputils.py
+# -Ariel Denos 8/29/2024
+
+
+# This version is V3, here I am including code that calculates m/z for all peptides with charges 2-6.
+# If you want to change that range of charges, change max_charge, and min_charge
+# It then filters out any peptide with an m/z less than 350. It also includes calculating run time
+# V4: To reduce redundancy, we will sizedown the psm file by combining any repeated peptides if their 
+#     retention time is within 180 s of the average. Ths may be changed, see line 84
+#JC note- only a small fraction of the peptides in my psm file were modified 7300 out of 50,000.  The others had no sequence in the modified peptide column. Also check that Fragpipe didn't include any modifications that are not in the AA labeling sites file
+#make sure the PTMs are limited to M[147] , no n[43]
+
+
+group = 'Stanford_AB'   # This helps in labeling your final file
+psm_file = r"D:\JC-stuff\Projects\StanfordCells\24June2026\SampleAB\psm-correct.tsv"
+protein_file = r"D:\JC-stuff\Projects\StanfordCells\24June2026\SampleAB\protein.tsv"
+output_file_path = r"D:\JC-stuff\Projects\StanfordCells\24June2026\SampleAB"
+
+study_type = 'tissue' # input either 'tissue' or 'culture'
+aa_label_path = r'D:\JC-stuff\Code\Create_ID_File_for_DeuteRater\aa_labeling_sites.tsv'
+aa_elem_comp = r'D:\JC-stuff\Code\Create_ID_File_for_DeuteRater\aa_elem_compositions.tsv'
+elems_path = r"D:\JC-stuff\Code\Create_ID_File_for_DeuteRater\elements.tsv"
+
+
+
+
+                # You should not have to modify any of the code below, unless you have unknown PTMs #
+
+import pandas as pd
+import time
+import re
+
+print('Thank you for your inputs, your file is on its way to being created!')
+
+start = time.time()
+start_initialize = time.time()
+print("Initializing...\t\t", end="")
+
+fragpipe_psm_DF = pd.DataFrame()
+fragpipe_protein_DF = pd.DataFrame()
+fragpipe_psm_DF = pd.read_csv(f'{psm_file}',delimiter = '\t')
+fragpipe_protein_DF = pd.read_csv(f'{protein_file}',delimiter = '\t')
+
+# copy data from 'Peptide' to 'Modified Peptide' when 'Modified Peptide' is blank
+fragpipe_psm_DF['Modified Peptide'] = fragpipe_psm_DF['Modified Peptide'].replace('', pd.NA)
+fragpipe_psm_DF['Modified Peptide'] = fragpipe_psm_DF['Modified Peptide'].fillna(fragpipe_psm_DF['Peptide'])
+#fragpipe_psm_DF.loc[fragpipe_psm_DF['Modified Peptide'].str.strip() == '', 'Modified Peptide'] = fragpipe_psm_DF['Peptide']
+
+# Filter out the columns that we don't need by keeping the ones we do #
+
+fragpipe_psm_DF = fragpipe_psm_DF.filter(regex = 'Protein|Modified Peptide|Ret|Observed|Peptide Mass|Charge|Gene|Modifications|Delta')  #JC questions, only a small portion of the peptide sequences were modified peptides are others brought in at any point? 
+fragpipe_protein_DF = fragpipe_protein_DF.filter(regex = 'Protein|Peptide|Modifications|Organ')
+
+# Rename columns to fit DeuteRater Requirements and merge files#
+
+fragpipe_psm_DF = fragpipe_psm_DF.rename(columns={'Modified Peptide':'Sequence','Protein Description':'Protein Name','Retention':'Precursor Retention Time (sec)',
+                 'Observed M/Z':'Precursor m/z','Calculated Peptide Mass':'Peptide Theoretical Mass',
+                 'Charge':'Identification Charge','Assigned Modifications':'ptm',
+                 'Protein Start':'start_loc','Protein End':'end_loc','Mapped Proteins':'Homologous Proteins','Gene':'gene_name',
+                 }) 
+
+fragpipe_protein_DF = fragpipe_protein_DF.rename(columns={'Total Peptides':'num_peptides','Unique Peptides':'num_unique',
+                                      'Razor Assigned Modifications':'PTM','Organism':'species','Protein Existence':'protein_existence',
+                                      })
+
+fragpipe_protein_DF = fragpipe_protein_DF.set_index('Protein ID')
+fragpipe_psm_DF = fragpipe_psm_DF#.set_index('Protein ID')
+
+# Sort the data by sequence, charge, and retention time
+psm_short = fragpipe_psm_DF.copy().sort_values(by=['Sequence', 'Identification Charge', 'Precursor Retention Time (sec)'])
+
+stop_initialize = time.time()
+print(f"Initialized dataframe from inputs in {((stop_initialize - start_initialize) / 60):0.3f} minutes")
+
+
+# Function to cluster retention times within 180 seconds
+def cluster_peptides(group):
+    clustered = []
+    current_cluster = []
+
+    for i, row in group.iterrows():
+        if not current_cluster:
+            current_cluster.append(row)
+        else:     # RT window currently set to 180 sec. Change if desired
+            if abs(row['Precursor Retention Time (sec)'] - current_cluster[-1]['Precursor Retention Time (sec)']) <= 180:
+                current_cluster.append(row)
+            else:
+                clustered.append(current_cluster)
+                current_cluster = [row]
+
+    if current_cluster:
+        clustered.append(current_cluster)
+
+    # Calculate mean for each cluster
+    clustered_data = []
+    for cluster in clustered:
+        cluster_df = pd.DataFrame(cluster)
+        mean_row = cluster_df.mean(numeric_only=True)
+        for col in cluster_df.columns:
+            if cluster_df[col].dtype == 'object':  # Preserve string columns by taking the first value
+                mean_row[col] = cluster_df[col].iloc[0]
+        clustered_data.append(mean_row)
+
+    return pd.DataFrame(clustered_data)
+
+# Group by Sequence and Charge and process each group
+start_cluster = time.time()
+print("Processing...\t\t", end="")
+grouped = psm_short.groupby(['Sequence', 'Identification Charge']).apply(cluster_peptides)
+
+# Remove redundant multi-index if created and set index for merging
+grouped.reset_index(drop=True, inplace=True)
+grouped = grouped.set_index('Protein ID')
+
+stop_cluster = time.time()
+print(f"Processed data for grouped in {((stop_cluster - start_cluster) / 60):0.3f} minutes")
+
+start_merge = time.time()
+print("Merging...\t\t", end="")
+ID_file = pd.merge(grouped,fragpipe_protein_DF, on = 'Protein ID')
+
+
+## With the current ID file, we are to iterate through each peptide, this is part of the set up
+ID_File_DF = ID_file.copy().reset_index()
+        # Save the columns names for later
+id_file_columns = ID_File_DF.columns
+        # Replace a few characters for itertuples function
+ID_File_DF.columns = ID_File_DF.columns.str.replace(r'[ ()/]', '_', regex=True)
+
+stop_merge = time.time()
+print(f"Merged and processed dataframe in {((stop_merge - start_merge) / 60):0.3f} minutes ")
+
+
+
+def multi_charged_peptides(row):
+    min_charge = 2
+    max_charge = 6
+    results = []
+
+    # Extract the original values to keep the entire row
+    original_row = row._asdict()  # Convert namedtuple to dictionary
+    neutral_mass = (original_row['Observed_Mass']) 
+    predict_neutral_mass = int(original_row['Calibrated_Observed_Mass']) 
+
+    for n in range(min_charge, max_charge + 1):
+        # Create a copy of the original row
+        new_row = original_row.copy()
+
+        # Update the specific columns
+        new_row['Identification_Charge'] = n
+        new_row['Precursor_m_z'] = (neutral_mass + n * 1.007276) / n
+        new_row['Calibrated_Observed_M_Z'] = (predict_neutral_mass + n * 1.007276) / n
+        
+        results.append(new_row)
+
+        # Filter out rows with low m/z
+        if new_row['Precursor_m_z'] < 350:
+            results.remove(new_row)
+
+    return results
+
+# With the current ID file, we are to iterate through each peptide/row and make a new file
+all_results = []
+start_expand_df = time.time()
+print("Expanding...\t\t", end="")
+
+for row in ID_File_DF.itertuples(index=False):
+    results = multi_charged_peptides(row)
+    all_results.extend(results)
+
+# Convert the results into a DataFrame
+expanded_df = pd.DataFrame(all_results)
+    # Convert column headers back to original
+expanded_df = expanded_df.set_axis(id_file_columns, axis=1) 
+    #Convert expanded df to new ID file
+
+stop_expand_df = time.time()
+print(f"Expanded dataframe with multi charged peptides in {((stop_expand_df - start_expand_df)/60):0.3f} minutes")
+ID_file = expanded_df
+
+
+# I am creating these columns because it says it needs them, but I don't think the program actually pulls them #
+
+ID_file['rt_start'] = '1'
+ID_file['rt_end'] = '2'
+ID_file['rt_width'] = '1'
+ID_file['sequence_version'] = '1'
+
+# Calculate and add last few columns #
+
+    # For some of the new columns, they use imported codes from a DeuteRater Download. I will put them in so this can be a one and done file
+    
+        #peputils.py from DeuteRater Files
+
+def calc_cf(aa_counts, aa_composition_df):
+    elem_dict = {elem: 0 for elem in aa_composition_df.loc[:, 'C':].columns}
+
+    for aa, count in aa_counts.items():
+        for elem in elem_dict.keys():
+            elem_dict[elem] += count * aa_composition_df.at[aa, elem]
+    elem_dict = positive_cf_change(elem_dict)
+
+    return elem_dict
+#the calc_cf function calculates elemental composition well
+#however it assumes all AAs have pepitde bonds on both ends  
+#(which is not true of terminal AAs) and does not include the charge values
+#so h2O and one H per charge must be added to get the most accurate cf
+#if we go to negative mode or use different adducts, adjust here
+
+#adds 1 O and z+2 H values to the elemental dict.
+#takes elemental_dict (dictionary) and z (an int)
+#returns the updated elemental dictionary
+def positive_cf_change(elemental_dict):
+    # since we are assuming positve and +H adduct we can just be direct
+    elemental_dict["O"] +=1
+    elemental_dict["H"] += 2# + z
+    return elemental_dict
+
+
+def calc_theory_mass(cf, elements_df):
+    mass = 0
+
+    for elem, count in cf.items():
+        mass += count * elements_df.at[elem, 'relative_atomic_mass']
+
+    return mass
+
+
+def calc_add_n(aa_counts, aa_labeling_dict):
+    add_n = 0
+
+    for aa, count in aa_counts.items():
+        add_n += count * aa_labeling_dict[aa]
+
+    return add_n
+
+
+mass_column = 'Observed Mass'
+literature_n_name = "literature_n"
+sequence_column_name = "Sequence"
+
+
+aa_label_df = pd.read_csv(aa_label_path, sep='\t')
+aa_label_df.set_index('study_type', inplace=True)
+aa_labeling_dict = aa_label_df.loc[study_type,].to_dict() 
+aa_comp_df = pd.read_csv(aa_elem_comp, sep='\t')
+aa_comp_df.set_index('amino_acid', inplace=True)
+
+
+def extracting_neut(row):
+    mass = row[mass_column]
+    if mass <= 700:
+        neut = 3
+    elif 701 <= mass <= 1700:
+        neut = 4
+    else:
+        neut = 5
+    return neut
+    
+    # Code copied and altered from "Theory_Preparer.py". The purpose here is to write cf and calculate literature_n #
+
+def _calculate_literature_n(row, aa_labeling_dict):
+     aa_counts = {}
+
+     for aa in row[sequence_column_name]:
+         if aa not in aa_counts.keys():
+             aa_counts[aa] = 0
+         aa_counts[aa] += 1
+     literature_n = calc_add_n(aa_counts, aa_labeling_dict)
+     #if Error:
+         #literature_n = 'You may have an unknwon PTM. Replace this with a character of a known PTM, or add\n your own to aa_labeling_sites'
+
+     return literature_n
+
+    # Convert to numeric for calculations #
+
+ID_file['Delta Mass'] = pd.to_numeric(ID_file['Delta Mass'], errors='coerce')
+ID_file['Peptide Theoretical Mass'] = pd.to_numeric(ID_file['Peptide Theoretical Mass'], errors='coerce')
+
+print('Calculating avg ppm...\t\t', end="")
+start_avg_ppm = time.time()
+ID_file['avg_ppm'] = (abs(ID_file['Delta Mass'])/ID_file['Peptide Theoretical Mass'])*1000000
+stop_avg_ppm = time.time()
+print(f"Calculated avg ppm in {((stop_avg_ppm - start_avg_ppm) / 60):0.3f} minutes")
+
+print('Calculating Neutromers to extract...\t\t', end="")
+start_neutromers = time.time()
+ID_file['neutromers_to_extract'] = ID_file.apply(extracting_neut, axis = 1)
+stop_neutromers = time.time()
+print(f"Calculated Neutromers to extract in {((stop_avg_ppm - start_avg_ppm) / 60):0.3f} minutes")
+
+    # Replace Fragpipe modifications with letters used in aa_labeling_dict #
+
+print('Replacing Modifications for code Recognition...\t\t', end="")
+start_replace = time.time()
+ID_file['Sequence'] = ID_file['Sequence'].str.replace(r'M\[147\]','m',regex =True)
+ID_file['Sequence'] = ID_file['Sequence'].str.replace(r'Q\[111\]','q',regex =True)
+ID_file['Sequence'] = ID_file['Sequence'].str.replace(r'C\[160\]','c',regex =True)
+ID_file['Sequence'] = ID_file['Sequence'].str.replace(r'C\[176\]','o',regex =True)
+ID_file['Sequence'] = ID_file['Sequence'].str.replace(r'K\[242\]','g',regex =True)
+stop_replace = time.time()
+print(f"Replaced modifications in {((stop_replace - start_replace) / 60):0.3f} minutes")
+
+    # If any modifications remain that did not get caught, it will error "aa_counts, KeyError '['"
+
+print('Calculating Literature N...\t\t', end="")
+start_lit_n = time.time()
+
+ID_file['literature_n'] = ID_file.apply(_calculate_literature_n, axis=1, aa_labeling_dict = aa_labeling_dict)
+
+stop_lit_n = time.time()
+print(f"Calculated Literature N-values in {((stop_lit_n - start_lit_n) / 60):0.3f} minutes")
+
+## Below is what I think we can use to help us get cf, if necessary. I think I got this from peaksXpro if you need it again
+
+def _interpret_aa_sequences(df, sequence_column_name):
+    # Load required resources
+    aa_comp_df = pd.read_csv(aa_elem_comp, sep='\t')
+    aa_comp_df.set_index('amino_acid', inplace=True)
+
+    elem_df = pd.read_csv(elems_path, sep='\t')
+    element_index_mask = [0, 10, 13, 15, 30, 31]  # Indexes for specific isotopes
+    elem_df = elem_df.iloc[element_index_mask]
+    elem_df.set_index('isotope_letter', inplace=True)
+
+    # Loop through each row in the DataFrame
+    for row in df.itertuples():
+        sequence = getattr(row, sequence_column_name)
+        aa_counts = {}
+
+        # Count amino acid occurrences
+        for aa in sequence:
+            aa_counts[aa] = aa_counts.get(aa, 0) + 1
+
+        # Calculate the elemental composition
+        elem_dict = calc_cf(aa_counts, aa_comp_df)
+
+        cff = ''.join(k + str(v) for k, v in elem_dict.items() if v > 0)
+        # Assign the calculated values to the DataFrame
+        df.at[row.Index, 'cf'] = cff
+
+    return df  # Optionally return the updated DataFrame
+
+
+def add_adduct_column(df):
+
+    # helper function to add the charge to the chemical formula. Is applied to each row in the df
+    def increment_cf(row):
+        cf_value = row['cf']
+
+        # Use regex to find the number after 'H'
+        match = re.search(r'H(\d+)', cf_value)
+        if match:
+            # Extract the current number after 'H'
+            current_h_value = int(match.group(1))
+            # Increment it by the value in 'Identification Charge'
+            new_h_value = current_h_value + row['Identification Charge']
+            # Replace the old value with the new value in the cf string
+            new_cf_value = cf_value.replace(f'H{current_h_value}', f'H{new_h_value}')
+            return new_cf_value
+
+        return cf_value
+
+    df['Adduct_cf'] = df.apply(increment_cf, axis=1)
+
+    return df
+
+
+# Call the function on your DataFrame
+
+print('Interpreting aa sequences, converting to cf...\t\t', end="")
+start_interpret = time.time()
+
+ID_file = _interpret_aa_sequences(ID_file, sequence_column_name=sequence_column_name)
+
+stop_interpret = time.time()
+print(f"Interpreted aa sequences in {(stop_interpret - start_interpret) / 60:0.3f} minutes")
+
+end = time.time()
+total = (end - start)/60
+
+print(f'Saving {group} ID file...')
+
+# Add Adduct_cf column derived from charge and chemical formula columns
+ID_file = add_adduct_column(ID_file)
+
+ID_file.to_csv(f'{output_file_path}\\{group}_ID_file.csv')
+
+print('Congratulations! you are finished with the ID_file creation')
+print(f'Total time: {total:0.3f} minutes')
+
+
